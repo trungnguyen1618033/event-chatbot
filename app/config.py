@@ -8,26 +8,6 @@ from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
-    #  ── LLM provider switch ────────────────────────────────────
-    llm_provider: str = "openai"  # "azure" | "bedrock" | "openai" | "gemini"
-
-    #  ── OpenAI (api.openai.com) ────────────────────────────────
-    openai_api_key: str = ""
-    openai_model: str = "gpt-4o-mini"
-
-    #  ── Bedrock (OpenAI-compatible proxy) ──────────────────────
-    bedrock_api_key: str = ""
-    bedrock_base_url: str = ""
-    bedrock_model: str = ""
-
-    #  ── Azure OpenAI ───────────────────────────────────────────
-    #  AZURE_OPENAI_ENDPOINT is a FULL URL including deployment + api-version.
-    #  Example:
-    #    https://<resource>.openai.azure.com/openai/deployments/<dep>/chat/completions?api-version=2025-01-01-preview
-    azure_openai_api_key: str = ""
-    azure_openai_endpoint: str = ""
-    azure_openai_model: str = ""
-
     #  ── Google Gemini (OpenAI-compatible endpoint) ─────────────
     gemini_api_key: str = ""
     gemini_model: str = "gemini-1.5-flash"
@@ -49,7 +29,11 @@ class Settings(BaseSettings):
     app_port: int = 8000
     debug: bool = False
 
-    model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
+    model_config = {
+        "env_file": ".env",
+        "env_file_encoding": "utf-8",
+        "extra": "ignore",
+    }
 
     @property
     def db_url(self) -> str:

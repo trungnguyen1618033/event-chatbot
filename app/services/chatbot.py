@@ -17,8 +17,7 @@ from copy import deepcopy
 from datetime import date, time
 from typing import Any, Dict, List, Optional, Tuple
 
-import httpx
-from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
+from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
 from pydantic import ValidationError
 
@@ -27,53 +26,6 @@ from app.models.event import ChatResponse, EventCreate
 from app.services.vector_store import vector_store
 
 logger = logging.getLogger(__name__)
-
-
-class _LLMResult:
-    """Minimal response wrapper: exposes `.content`, matching LangChain's AIMessage."""
-
-    def __init__(self, content: str) -> None:
-        self.content = content
-
-
-class AzureFullUrlClient:
-    """
-    Tiny async client for Azure endpoints whose URL already contains
-    /openai/deployments/<dep>/chat/completions?api-version=<ver>.
-
-    Matches the `ainvoke(messages)` shape used by langchain-openai's ChatOpenAI
-    so callers don't need to special-case the provider.
-    """
-
-    _ROLE_MAP = {SystemMessage: "system", HumanMessage: "user", AIMessage: "assistant"}
-
-    def __init__(self, *, url: str, api_key: str, model: str, temperature: float = 0.2) -> None:
-        self._url = url
-        self._api_key = api_key
-        self._model = model
-        self._temperature = temperature
-
-    def _serialize(self, messages: List[BaseMessage]) -> List[Dict[str, str]]:
-        out: List[Dict[str, str]] = []
-        for m in messages:
-            role = self._ROLE_MAP.get(type(m), "user")
-            out.append({"role": role, "content": m.content})
-        return out
-
-    async def ainvoke(self, messages: List[BaseMessage]) -> _LLMResult:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            resp = await client.post(
-                self._url,
-                json={
-                    "model": self._model,
-                    "messages": self._serialize(messages),
-                    "temperature": self._temperature,
-                },
-                headers={"api-key": self._api_key, "Content-Type": "application/json"},
-            )
-            resp.raise_for_status()
-            data = resp.json()
-            return _LLMResult(content=data["choices"][0]["message"]["content"])
 
 
 # ── Required fields (must be present before we can save) ──────────────────────
@@ -174,40 +126,16 @@ class ChatbotService:
         self._llm = None  # lazy-initialised on first use
         self._sessions: Dict[str, SessionState] = {}
 
-    def _get_llm(self):
+    def _get_llm(self) -> ChatOpenAI:
         if self._llm is None:
             s = get_settings()
-            provider = (s.llm_provider or "openai").lower()
-
-            if provider == "azure":
-                self._llm = AzureFullUrlClient(
-                    url=s.azure_openai_endpoint,
-                    api_key=s.azure_openai_api_key,
-                    model=s.azure_openai_model,
-                    temperature=0.2,
-                )
-            elif provider == "bedrock":
-                self._llm = ChatOpenAI(
-                    model=s.bedrock_model,
-                    api_key=s.bedrock_api_key,
-                    base_url=s.bedrock_base_url,
-                    temperature=0.2,
-                )
-            elif provider == "gemini":
-                self._llm = ChatOpenAI(
-                    model=s.gemini_model,
-                    api_key=s.gemini_api_key,
-                    base_url=s.gemini_base_url,
-                    temperature=0.2,
-                )
-            else:  # "openai"
-                self._llm = ChatOpenAI(
-                    model=s.openai_model,
-                    api_key=s.openai_api_key,
-                    temperature=0.2,
-                )
-
-            logger.info("LLM provider=%s, class=%s", provider, type(self._llm).__name__)
+            self._llm = ChatOpenAI(
+                model=s.gemini_model,
+                api_key=s.gemini_api_key,
+                base_url=s.gemini_base_url,
+                temperature=0.2,
+            )
+            logger.info("LLM model=%s (Gemini)", s.gemini_model)
         return self._llm
 
     # ── public interface ──────────────────────────────────────────────────────
@@ -330,9 +258,7 @@ class ChatbotService:
             # User said no or wants to change something
             session.awaiting_confirmation = False
             # Try to extract any revision in the same message
-            updates = await self._extract_fields(
-                session.draft, user_message, asked_field=None
-            )
+            updates = await self._extract_fields(session.draft, user_message, asked_field=None)
             if updates:
                 session.draft.update({k: v for k, v in updates.items() if v is not None})
                 ack = self._build_ack(updates)
@@ -391,9 +317,7 @@ class ChatbotService:
     _MULTI_MARKERS = (",", " and ", " also ", "actually", "change the", " on ", " at ")
 
     @staticmethod
-    def _try_bare_assignment(
-        asked_field: Optional[str], message: str
-    ) -> Optional[Dict[str, Any]]:
+    def _try_bare_assignment(asked_field: Optional[str], message: str) -> Optional[Dict[str, Any]]:
         """
         Deterministically assign a single bare value to the asked field —
         bypassing the LLM. Returns None if the message doesn't look like a
@@ -452,9 +376,7 @@ class ChatbotService:
             return first_error.get("msg", str(exc))
 
     @staticmethod
-    def _validate_updates(
-        draft: Dict[str, Any], updated_keys: set
-    ) -> Tuple[Optional[str], set]:
+    def _validate_updates(draft: Dict[str, Any], updated_keys: set) -> Tuple[Optional[str], set]:
         """
         Run EventCreate against the current draft and surface ONLY errors that
         belong to fields the user just set (ignoring 'field required' errors
