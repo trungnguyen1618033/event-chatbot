@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Event Creation Chatbot</title>
+<style>
+  :root {
+    --bg: #0f1117;
+    --surface: #1a1d27;
+    --surface2: #22263a;
+    --border: #2e3250;
+    --accent: #6366f1;
+    --accent-hover: #818cf8;
+    --user-bubble: #4f46e5;
+    --bot-bubble: #22263a;
+    --text: #e2e8f0;
+    --text-muted: #94a3b8;
+    --success: #22c55e;
+    --error: #ef4444;
+    --radius: 16px;
+    --radius-sm: 8px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+  }
+
+  header {
+    text-align: center;
+    margin-bottom: 1.5rem;
+  }
+  header h1 {
+    font-size: 1.75rem;
+    font-weight: 700;
+    background: linear-gradient(135deg, var(--accent), #a78bfa);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  header p { color: var(--text-muted); font-size: 0.875rem; margin-top: 0.25rem; }
+
+  .chat-container {
+    width: 100%;
+    max-width: 680px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    display: flex;
+    flex-direction: column;
+    height: 72vh;
+    min-height: 420px;
+    box-shadow: 0 25px 60px rgba(0,0,0,0.5);
+    overflow: hidden;
+  }
+
+  .chat-header {
+    padding: 1rem 1.25rem;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+  .chat-header .avatar {
+    width: 36px; height: 36px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--accent), #a78bfa);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1rem;
+    flex-shrink: 0;
+  }
+  .chat-header .info strong { font-size: 0.9rem; }
+  .chat-header .info span { font-size: 0.75rem; color: var(--success); }
+  .chat-header .reset-btn {
+    margin-left: auto;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    padding: 0.3rem 0.75rem;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: all .2s;
+  }
+  .chat-header .reset-btn:hover { border-color: var(--accent); color: var(--text); }
+
+  .messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 1.25rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.875rem;
+    scroll-behavior: smooth;
+  }
+
+  .messages::-webkit-scrollbar { width: 5px; }
+  .messages::-webkit-scrollbar-track { background: transparent; }
+  .messages::-webkit-scrollbar-thumb { background: var(--border); border-radius: 99px; }
+
+  .message {
+    display: flex;
+    gap: 0.5rem;
+    max-width: 88%;
+    animation: slideIn .25s ease;
+  }
+  @keyframes slideIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .message.user { flex-direction: row-reverse; align-self: flex-end; }
+  .message.bot  { align-self: flex-start; }
+
+  .bubble {
+    padding: 0.7rem 1rem;
+    border-radius: var(--radius);
+    font-size: 0.875rem;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .message.user .bubble {
+    background: var(--user-bubble);
+    color: #fff;
+    border-bottom-right-radius: 4px;
+  }
+  .message.bot .bubble {
+    background: var(--bot-bubble);
+    color: var(--text);
+    border-bottom-left-radius: 4px;
+    border: 1px solid var(--border);
+  }
+  .message.bot .bubble.success { border-color: var(--success); }
+  .message.bot .bubble.error   { border-color: var(--error); }
+
+  .scenario-tag {
+    display: inline-block;
+    font-size: 0.65rem;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    border-radius: 99px;
+    padding: 1px 7px;
+    margin-bottom: 4px;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+  }
+
+  .typing {
+    align-self: flex-start;
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    padding: 0.5rem 0;
+  }
+  .dots span {
+    display: inline-block;
+    width: 5px; height: 5px;
+    border-radius: 50%;
+    background: var(--text-muted);
+    animation: bounce .9s infinite;
+  }
+  .dots span:nth-child(2) { animation-delay: .15s; }
+  .dots span:nth-child(3) { animation-delay: .30s; }
+  @keyframes bounce {
+    0%,80%,100% { transform: translateY(0); }
+    40%          { transform: translateY(-5px); }
+  }
+
+  .input-area {
+    padding: 1rem;
+    border-top: 1px solid var(--border);
+    display: flex;
+    gap: 0.5rem;
+    align-items: flex-end;
+  }
+  .input-area textarea {
+    flex: 1;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 0.65rem 0.9rem;
+    color: var(--text);
+    font-size: 0.875rem;
+    font-family: inherit;
+    resize: none;
+    min-height: 44px;
+    max-height: 120px;
+    outline: none;
+    transition: border-color .2s;
+    line-height: 1.5;
+  }
+  .input-area textarea:focus { border-color: var(--accent); }
+  .input-area textarea::placeholder { color: var(--text-muted); }
+
+  .send-btn {
+    width: 44px; height: 44px;
+    border-radius: var(--radius-sm);
+    background: var(--accent);
+    border: none;
+    color: #fff;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+    transition: background .2s;
+    font-size: 1rem;
+  }
+  .send-btn:hover:not(:disabled) { background: var(--accent-hover); }
+  .send-btn:disabled { opacity: .4; cursor: not-allowed; }
+
+  .quick-btns {
+    padding: 0 1rem 0.75rem;
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+  }
+  .quick-btn {
+    font-size: 0.75rem;
+    padding: 0.3rem 0.8rem;
+    border-radius: 99px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all .2s;
+  }
+  .quick-btn:hover { border-color: var(--accent); color: var(--text); }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🎪 Event Creation Chatbot</h1>
+  <p>Describe your event naturally — the AI will guide you step by step.</p>
+</header>
+
+<div class="chat-container">
+  <div class="chat-header">
+    <div class="avatar">🤖</div>
+    <div class="info">
+      <strong>EventBot</strong><br>
+      <span>● Online</span>
+    </div>
+    <button class="reset-btn" onclick="resetSession()">↺ New session</button>
+  </div>
+
+  <div class="messages" id="messages"></div>
+
+  <div class="quick-btns" id="quickBtns">
+    <button class="quick-btn" onclick="send('I want to create an event')">🚀 Start creating</button>
+    <button class="quick-btn" onclick="send('Yes, save it')">✅ Yes, save</button>
+    <button class="quick-btn" onclick="send('No, I want to change something')">✏️ Change something</button>
+  </div>
+
+  <div class="input-area">
+    <textarea
+      id="msgInput"
+      placeholder="Type your message… (Enter to send, Shift+Enter for new line)"
+      rows="1"
+    ></textarea>
+    <button class="send-btn" id="sendBtn" onclick="handleSend()" title="Send">
+      ➤
+    </button>
+  </div>
+</div>
+
+<script>
+const API_BASE = window.location.origin + '/api';
+let sessionId = crypto.randomUUID();
+
+const messagesEl = document.getElementById('messages');
+const input = document.getElementById('msgInput');
+const sendBtn = document.getElementById('sendBtn');
+
+// Auto-resize textarea
+input.addEventListener('input', () => {
+  input.style.height = 'auto';
+  input.style.height = Math.min(input.scrollHeight, 120) + 'px';
+});
+
+input.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    handleSend();
+  }
+});
+
+function appendMessage(role, text, scenario = '') {
+  const wrapper = document.createElement('div');
+  wrapper.className = `message ${role}`;
+
+  const bubble = document.createElement('div');
+  bubble.className = 'bubble';
+  if (scenario === 'success_save') bubble.classList.add('success');
+  if (scenario === 'error_db' || scenario === 'invalid_input') bubble.classList.add('error');
+
+  if (role === 'bot' && scenario) {
+    const tag = document.createElement('div');
+    tag.className = 'scenario-tag';
+    tag.textContent = scenario.replace(/_/g, ' ');
+    bubble.appendChild(tag);
+  }
+
+  const textNode = document.createElement('div');
+  textNode.textContent = text;
+  bubble.appendChild(textNode);
+  wrapper.appendChild(bubble);
+  messagesEl.appendChild(wrapper);
+  messagesEl.scrollTop = messagesEl.scrollHeight;
+}
+
+function showTyping() {
+  const el = document.createElement('div');
+  el.className = 'typing';
+  el.id = 'typing-indicator';
+  el.innerHTML = '<div class="dots"><span></span><span></span><span></span></div> EventBot is thinking…';
+  messagesEl.appendChild(el);
+  messagesEl.scrollTop = messagesEl.scrollHeight;
+}
+
+function hideTyping() {
+  document.getElementById('typing-indicator')?.remove();
+}
+
+async function send(text) {
+  const msg = text || input.value.trim();
+  if (!msg) return;
+
+  appendMessage('user', msg);
+  input.value = '';
+  input.style.height = 'auto';
+  sendBtn.disabled = true;
+  showTyping();
+
+  try {
+    const res = await fetch(`${API_BASE}/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ session_id: sessionId, message: msg }),
+    });
+    const data = await res.json();
+    hideTyping();
+    appendMessage('bot', data.message, data.scenario);
+  } catch (err) {
+    hideTyping();
+    appendMessage('bot', '⚠️ Connection error — is the server running?', 'error_db');
+  } finally {
+    sendBtn.disabled = false;
+    input.focus();
+  }
+}
+
+function handleSend() { send(); }
+
+function resetSession() {
+  const old = sessionId;
+  sessionId = crypto.randomUUID();
+  fetch(`${API_BASE}/sessions/${old}`, { method: 'DELETE' }).catch(() => {});
+  messagesEl.innerHTML = '';
+  appendMessage('bot', '🆕 New session started. What event would you like to create?', '');
+}
+
+// Greeting on load
+window.addEventListener('load', () => {
+  appendMessage(
+    'bot',
+    "👋 Hello! I'm EventBot, your AI-powered event creation assistant.\n\nI'll guide you through creating an event step by step. Just tell me the name of your event to get started!",
+    ''
+  );
+});
+</script>
+
+</body>
+</html>
