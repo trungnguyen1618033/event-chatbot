@@ -1,13 +1,3 @@
-"""
-Chatbot service — the brain of the application.
-
-Responsibilities:
- • Maintain per-session event-draft state
- • Use LangChain + OpenAI to extract / update fields from free-form input
- • Validate accumulated data with Pydantic
- • Return structured ChatResponse objects following the spec
-"""
-
 from __future__ import annotations
 
 import json
@@ -28,7 +18,7 @@ from app.services.vector_store import vector_store
 logger = logging.getLogger(__name__)
 
 
-# ── Required fields (must be present before we can save) ──────────────────────
+# Required fields (must be present before we can save)
 REQUIRED_FIELDS = [
     "name",
     "date",
@@ -108,7 +98,6 @@ Respond with a pure JSON object, no markdown fences, no explanation.
 
 
 class SessionState:
-    """In-memory state for one conversation session."""
 
     def __init__(self, session_id: str) -> None:
         self.session_id = session_id
@@ -120,7 +109,6 @@ class SessionState:
 
 
 class ChatbotService:
-    """Orchestrates conversation and event-data extraction."""
 
     def __init__(self) -> None:
         self._llm = None  # lazy-initialised on first use
@@ -150,10 +138,6 @@ class ChatbotService:
         vector_store.clear_session(session_id)
 
     async def handle_message(self, session_id: str, user_message: str) -> ChatResponse:
-        """
-        Main entry point.  Accepts a user message, updates session state,
-        and returns the next chatbot response.
-        """
         session = self.get_or_create_session(session_id)
 
         # Persist to vector store for semantic recall
@@ -166,15 +150,10 @@ class ChatbotService:
                 message="This event has already been saved. Start a new session to create another event.",
             )
 
-        # ── handle confirmation turn ──────────────────────────────────────────
+        # handle confirmation turn
         if session.awaiting_confirmation:
             return await self._handle_confirmation(session, user_message)
 
-        # ── extract fields from message ───────────────────────────────────────
-        # First try a deterministic bare-value assignment to the asked field.
-        # This bypasses the LLM for simple answers ("4", "2026-01-01", "19:00"),
-        # which makes the bot robust against weaker models that ignore the
-        # asked_field hint and misassign by value-shape.
         updates = self._try_bare_assignment(session.last_asked_field, user_message)
         if updates is None:
             updates = await self._extract_fields(
@@ -183,11 +162,10 @@ class ChatbotService:
         if updates:
             session.draft.update({k: v for k, v in updates.items() if v is not None})
 
-        # ── validate just-updated fields immediately ──────────────────────────
+        # validate just-updated fields immediately
         updated_keys = {k for k, v in (updates or {}).items() if v is not None}
         per_field_error, bad_keys = self._validate_updates(session.draft, updated_keys)
         if per_field_error:
-            # Drop invalid values so the bot re-asks for them
             for k in bad_keys:
                 session.draft.pop(k, None)
             response = ChatResponse(
@@ -197,7 +175,7 @@ class ChatbotService:
             self._append_assistant(session, response.message)
             return response
 
-        # ── full draft validation (cross-field rules, runs only when complete) ─
+        # full draft validation (cross-field rules, runs only when complete)
         validation_error = self._validate_draft(session.draft)
         if validation_error and self._draft_looks_complete(session.draft):
             response = ChatResponse(
@@ -207,12 +185,12 @@ class ChatbotService:
             self._append_assistant(session, response.message)
             return response
 
-        # ── check completeness ────────────────────────────────────────────────
+        # check completeness
         missing = self._missing_fields(session.draft)
         if not missing:
             return self._ask_for_confirmation(session)
 
-        # ── ask for next missing field ────────────────────────────────────────
+        # ask for next missing field
         next_field = missing[0]
         prompt = FIELD_PROMPTS.get(next_field, f"Could you provide the {next_field}?")
         session.last_asked_field = next_field
@@ -226,8 +204,6 @@ class ChatbotService:
         response = ChatResponse(scenario="missing_field", message=message)
         self._append_assistant(session, response.message)
         return response
-
-    # ── confirmation flow ─────────────────────────────────────────────────────
 
     def _ask_for_confirmation(self, session: SessionState) -> ChatResponse:
         draft = session.draft
@@ -249,15 +225,12 @@ class ChatbotService:
         if affirmative:
             session.awaiting_confirmation = False
             session.completed = True
-            # Signal caller to proceed with DB save (caller reads .completed)
             response = ChatResponse(
                 scenario="success_save",
-                message="✅ Got it! Saving your event now…",
+                message="Saving your event now…",
             )
         else:
-            # User said no or wants to change something
             session.awaiting_confirmation = False
-            # Try to extract any revision in the same message
             updates = await self._extract_fields(session.draft, user_message, asked_field=None)
             if updates:
                 session.draft.update({k: v for k, v in updates.items() if v is not None})
@@ -274,7 +247,7 @@ class ChatbotService:
         self._append_assistant(session, response.message)
         return response
 
-    # ── LangChain extraction ──────────────────────────────────────────────────
+    # LangChain extraction
 
     async def _extract_fields(
         self,
@@ -282,7 +255,6 @@ class ChatbotService:
         user_message: str,
         asked_field: Optional[str] = None,
     ) -> Dict[str, Any]:
-        """Call the LLM to extract / update fields from the user message."""
         system_content = EXTRACTION_SYSTEM_PROMPT.format(
             draft=json.dumps(draft, default=str, indent=2),
             asked_field=asked_field or "(no specific field — extract whatever is mentioned)",
@@ -302,8 +274,6 @@ class ChatbotService:
             logger.warning("Extraction failed: %s", exc)
             return {}
 
-    # ── helpers ───────────────────────────────────────────────────────────────
-
     @staticmethod
     def _missing_fields(draft: Dict[str, Any]) -> List[str]:
         return [f for f in REQUIRED_FIELDS if not draft.get(f)]
@@ -312,17 +282,10 @@ class ChatbotService:
     def _draft_looks_complete(draft: Dict[str, Any]) -> bool:
         return not any(draft.get(f) is None for f in REQUIRED_FIELDS)
 
-    # markers that suggest the user message contains MORE than a single bare
-    # answer (multi-field, correction, free-form) and should defer to the LLM
     _MULTI_MARKERS = (",", " and ", " also ", "actually", "change the", " on ", " at ")
 
     @staticmethod
     def _try_bare_assignment(asked_field: Optional[str], message: str) -> Optional[Dict[str, Any]]:
-        """
-        Deterministically assign a single bare value to the asked field —
-        bypassing the LLM. Returns None if the message doesn't look like a
-        primitive answer (then caller should fall back to LLM extraction).
-        """
         if not asked_field:
             return None
         msg = message.strip()
@@ -365,7 +328,6 @@ class ChatbotService:
 
     @staticmethod
     def _validate_draft(draft: Dict[str, Any]) -> Optional[str]:
-        """Try to build an EventCreate; return the first validation error string or None."""
         if ChatbotService._missing_fields(draft):
             return None  # Don't validate incomplete drafts
         try:
@@ -377,13 +339,6 @@ class ChatbotService:
 
     @staticmethod
     def _validate_updates(draft: Dict[str, Any], updated_keys: set) -> Tuple[Optional[str], set]:
-        """
-        Run EventCreate against the current draft and surface ONLY errors that
-        belong to fields the user just set (ignoring 'field required' errors
-        for fields that haven't been asked yet).
-
-        Returns (error_message, {bad_keys}). error_message is None on success.
-        """
         if not updated_keys:
             return None, set()
         try:
@@ -454,5 +409,4 @@ class ChatbotService:
         return session.completed if session else False
 
 
-# Singleton
 chatbot_service = ChatbotService()

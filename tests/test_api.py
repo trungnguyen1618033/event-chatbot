@@ -1,8 +1,3 @@
-"""
-tests/test_api.py
-Tests for FastAPI endpoints using TestClient (no real DB needed — DB is mocked).
-"""
-
 from __future__ import annotations
 
 from datetime import date, time
@@ -15,8 +10,6 @@ from app.main import app
 
 client = TestClient(app, raise_server_exceptions=False)
 
-
-# ── Shared payload ─────────────────────────────────────────────────────────────
 
 VALID_EVENT = {
     "name": "Test Jazz Night",
@@ -39,21 +32,14 @@ VALID_EVENT = {
 }
 
 
-# ── Health check ──────────────────────────────────────────────────────────────
-
-
 def test_health_endpoint():
     resp = client.get("/health")
     assert resp.status_code == 200
     assert resp.json()["status"] == "ok"
 
 
-# ── /api/register-event ───────────────────────────────────────────────────────
-
-
 class TestRegisterEvent:
     def _mock_db(self, exists=False, insert_result=None):
-        """Return context managers that patch db_service methods."""
         default_result = {
             "id": 1,
             "name": "Test Jazz Night",
@@ -149,9 +135,7 @@ class TestRegisterEvent:
         assert detail["scenario"] == "error_db"
 
 
-# ── /api/chat ─────────────────────────────────────────────────────────────────
-
-
+# /api/chat
 class TestChatEndpoint:
     @patch("app.api.routes.chatbot_service")
     def test_chat_returns_chat_response_shape(self, mock_svc):
@@ -185,7 +169,7 @@ class TestChatEndpoint:
         from app.models.event import ChatResponse as CR
 
         mock_svc.handle_message = AsyncMock(
-            return_value=CR(scenario="success_save", message="✅ Got it! Saving your event now…")
+            return_value=CR(scenario="success_save", message="Saving your event now…")
         )
         mock_svc.is_completed.return_value = True
         mock_svc.get_draft.return_value = VALID_EVENT
@@ -211,9 +195,7 @@ class TestChatEndpoint:
         assert body["scenario"] == "success_save"
 
 
-# ── /api/sessions/{id} DELETE ─────────────────────────────────────────────────
-
-
+# /api/sessions/{id} DELETE
 def test_reset_session():
     with patch("app.api.routes.chatbot_service") as mock_svc:
         mock_svc.reset_session = MagicMock()

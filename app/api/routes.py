@@ -1,14 +1,3 @@
-"""
-FastAPI route definitions.
-
-Endpoints:
-  POST /api/chat              — conversational turn
-  POST /api/register-event    — direct event registration (used by chatbot internally and for testing)
-  GET  /api/events            — list stored events
-  GET  /api/events/{id}       — get one event
-  DELETE /api/sessions/{id}   — reset a session
-"""
-
 from __future__ import annotations
 
 import logging
@@ -33,11 +22,7 @@ router = APIRouter()
 
 @router.post("/chat", response_model=ChatResponse, tags=["Chat"])
 async def chat(payload: ChatMessage) -> ChatResponse:
-    """
-    Process one conversational turn.
-    If the chatbot has collected all fields and the user confirmed, the event
-    is automatically saved to the database.
-    """
+
     response = await chatbot_service.handle_message(payload.session_id, payload.message)
 
     # Auto-save when the user confirmed
@@ -47,7 +32,7 @@ async def chat(payload: ChatMessage) -> ChatResponse:
             try:
                 event = EventCreate(**draft)
                 await _persist_event(payload.session_id, event)
-                response.message = f"✅ Event '{event.name}' saved successfully to the database!"
+                response.message = f"Event '{event.name}' saved successfully to the database!"
             except ValidationError as exc:
                 response = ChatResponse(
                     scenario="invalid_input",
@@ -80,10 +65,7 @@ async def chat(payload: ChatMessage) -> ChatResponse:
     tags=["Events"],
 )
 async def register_event(payload: RegisterEventRequest) -> Dict[str, Any]:
-    """
-    Directly register a fully-formed event.
-    Used for programmatic/API access and unit tests.
-    """
+
     try:
         if await db_service.event_exists(payload.event.name, payload.event.date):
             raise HTTPException(
@@ -148,7 +130,7 @@ async def get_event(event_id: int) -> Dict[str, Any]:
     return row
 
 
-# ── Session management ────────────────────────────────────────────────────────
+# Session management
 
 
 @router.delete("/sessions/{session_id}", tags=["Sessions"])
@@ -157,7 +139,7 @@ async def reset_session(session_id: str) -> Dict[str, str]:
     return {"message": f"Session '{session_id}' has been reset."}
 
 
-# ── internal helper ───────────────────────────────────────────────────────────
+# internal helper
 
 
 async def _persist_event(session_id: str, event: EventCreate) -> Dict[str, Any]:

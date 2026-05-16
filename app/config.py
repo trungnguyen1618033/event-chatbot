@@ -1,30 +1,26 @@
-"""
-Central configuration loaded from .env.
-"""
-
 from functools import lru_cache
 
 from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
-    #  ── Google Gemini (OpenAI-compatible endpoint) ─────────────
+    # Google Gemini (OpenAI-compatible endpoint)
     gemini_api_key: str = ""
     gemini_model: str = "gemini-1.5-flash"
     gemini_base_url: str = "https://generativelanguage.googleapis.com/v1beta/openai/"
 
-    #  PostgreSQL
+    # PostgreSQL
     db_host: str = "localhost"
     db_port: int = 5432
     db_name: str = "event_chatbot"
     db_user: str = "postgres"
     db_password: str = "postgres"
 
-    #  ChromaDB
+    # ChromaDB
     chroma_persist_dir: str = "./chroma_data"
     chroma_collection: str = "chat_history"
 
-    #  App
+    # App
     app_host: str = "0.0.0.0"
     app_port: int = 8000
     debug: bool = False

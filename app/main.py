@@ -1,9 +1,3 @@
-"""
-FastAPI application entry point.
-Configures lifespan (DB connect/disconnect), mounts static files,
-registers routers, and serves the chat widget.
-"""
-
 from __future__ import annotations
 
 import logging
@@ -29,7 +23,6 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Startup / shutdown hook."""
     logger.info("Starting up …")
     await db_service.connect()
     await db_service.create_tables()
@@ -46,7 +39,7 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# ── CORS ──────────────────────────────────────────────────────────────────────
+# CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -55,16 +48,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ── Static files ──────────────────────────────────────────────────────────────
+# Static files
 static_dir = Path(__file__).parent.parent / "static"
 if static_dir.exists():
     app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
-# ── API routes ────────────────────────────────────────────────────────────────
+# API routes
 app.include_router(router, prefix="/api")
 
 
-# ── Root — serve the chat widget ──────────────────────────────────────────────
+# Root — serve the chat widget
 @app.get("/", include_in_schema=False)
 async def serve_chat_widget():
     widget = static_dir / "chat_widget.html"

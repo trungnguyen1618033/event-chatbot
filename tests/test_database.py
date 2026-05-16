@@ -1,14 +1,3 @@
-"""
-tests/test_database.py
-Tests for DatabaseService — all DB interactions are mocked via asyncpg.
-
-These tests verify:
- • insert_event executes the expected SQL
- • transaction rollback occurs on failure
- • event_exists returns correct booleans
- • duplicate-key exception propagates correctly
-"""
-
 from __future__ import annotations
 
 from datetime import date, time
@@ -19,8 +8,6 @@ import pytest
 
 from app.models.event import EventCreate
 from app.services.database import DatabaseService
-
-# ── Fixtures ──────────────────────────────────────────────────────────────────
 
 VALID_EVENT = EventCreate(
     name="Kyoto Jazz Night",
@@ -50,7 +37,6 @@ def db_service():
 
 
 def make_pool(fetchrow_result=None, fetch_result=None):
-    """Create a fully mocked asyncpg-style pool."""
     conn = AsyncMock()
     conn.fetchrow = AsyncMock(return_value=fetchrow_result)
     conn.fetch = AsyncMock(return_value=fetch_result or [])
@@ -75,9 +61,6 @@ def make_pool(fetchrow_result=None, fetch_result=None):
     return pool, conn
 
 
-# ── event_exists ──────────────────────────────────────────────────────────────
-
-
 class TestEventExists:
     @pytest.mark.asyncio
     async def test_returns_true_when_row_found(self, db_service):
@@ -94,9 +77,6 @@ class TestEventExists:
 
         result = await db_service.event_exists("Unknown Event", date(2026, 1, 1))
         assert result is False
-
-
-# ── insert_event ──────────────────────────────────────────────────────────────
 
 
 class TestInsertEvent:
@@ -159,9 +139,6 @@ class TestInsertEvent:
             await db_service.insert_event(VALID_EVENT)
 
 
-# ── get_events ────────────────────────────────────────────────────────────────
-
-
 class TestGetEvents:
     @pytest.mark.asyncio
     async def test_returns_list_of_dicts(self, db_service):
@@ -185,9 +162,6 @@ class TestGetEvents:
 
         result = await db_service.get_events()
         assert result == []
-
-
-# ── get_event_by_id ───────────────────────────────────────────────────────────
 
 
 class TestGetEventById:

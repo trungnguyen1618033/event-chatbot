@@ -1,9 +1,3 @@
-"""
-tests/test_conversation.py
-Tests for chatbot session state, missing-field detection,
-and scenario tagging — without requiring a live OpenAI API key.
-"""
-
 from __future__ import annotations
 
 from datetime import date, time
@@ -18,12 +12,9 @@ from app.services.chatbot import (
     SessionState,
 )
 
-# ── Fixtures ──────────────────────────────────────────────────────────────────
-
 
 @pytest.fixture
 def service():
-    """ChatbotService with mocked LLM and vector store."""
     svc = ChatbotService.__new__(ChatbotService)
     svc._sessions = {}
     svc._llm = AsyncMock()
@@ -51,9 +42,6 @@ FULL_DRAFT = {
 }
 
 
-# ── SessionState ──────────────────────────────────────────────────────────────
-
-
 class TestSessionState:
     def test_new_session_empty_draft(self):
         session = SessionState("s1")
@@ -73,9 +61,6 @@ class TestSessionState:
         assert "name" not in s2.draft
 
 
-# ── Missing field detection ────────────────────────────────────────────────────
-
-
 class TestMissingFields:
     def test_all_required_missing_on_empty_draft(self, service):
         missing = service._missing_fields({})
@@ -89,9 +74,6 @@ class TestMissingFields:
     def test_no_missing_when_all_required_present(self, service):
         missing = service._missing_fields(FULL_DRAFT)
         assert missing == []
-
-
-# ── Validation helper ─────────────────────────────────────────────────────────
 
 
 class TestValidateDraft:
@@ -116,13 +98,9 @@ class TestValidateDraft:
         assert err is not None
 
 
-# ── handle_message — mocked LLM ───────────────────────────────────────────────
-
-
 class TestHandleMessage:
     @pytest.mark.asyncio
     async def test_first_message_returns_missing_field_scenario(self, service):
-        """On first message, chatbot should ask for missing fields."""
         with (
             patch.object(service, "_extract_fields", new=AsyncMock(return_value={})),
             patch("app.services.chatbot.vector_store") as mock_vs,
@@ -200,9 +178,6 @@ class TestHandleMessage:
             response = await service.handle_message("sess6", "Hello again")
 
         assert response.scenario == "success_save"
-
-
-# ── Summary / acknowledgement helpers ────────────────────────────────────────
 
 
 class TestHelpers:

@@ -1,15 +1,3 @@
-"""
-Replay the scenarios from CONVERSATION_LOGS.md through the real LLM
-and write a turn-by-turn log to logs/replay_<timestamp>.log.
-
-The DB save step is bypassed: when the chatbot returns scenario=success_save
-we just record the draft. To actually persist, run via the FastAPI app
-with Postgres up.
-
-Run:
-    .venv/bin/python scripts/replay_logs.py
-"""
-
 from __future__ import annotations
 
 import asyncio

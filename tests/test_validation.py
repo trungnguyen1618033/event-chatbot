@@ -1,8 +1,3 @@
-"""
-tests/test_validation.py
-Unit tests for Pydantic model validation (EventCreate).
-"""
-
 from __future__ import annotations
 
 from datetime import date, time
@@ -11,8 +6,6 @@ import pytest
 from pydantic import ValidationError
 
 from app.models.event import EventCreate
-
-# ── Helpers ───────────────────────────────────────────────────────────────────
 
 
 def valid_payload(**overrides) -> dict:
@@ -39,9 +32,6 @@ def valid_payload(**overrides) -> dict:
     return base
 
 
-# ── Valid event ───────────────────────────────────────────────────────────────
-
-
 class TestValidEvent:
     def test_full_valid_event(self):
         event = EventCreate(**valid_payload())
@@ -57,9 +47,6 @@ class TestValidEvent:
         payload.pop("description")
         event = EventCreate(**payload)
         assert event.description is None
-
-
-# ── Email validation ──────────────────────────────────────────────────────────
 
 
 class TestEmailValidation:
@@ -92,12 +79,8 @@ class TestEmailValidation:
         assert event.organizer_email == good_email.lower()
 
 
-# ── Date / time validation ────────────────────────────────────────────────────
-
-
 class TestDateValidation:
     def test_invalid_date_string_rejected(self):
-        """Pydantic should reject non-date values."""
         with pytest.raises(ValidationError):
             EventCreate(**valid_payload(date="not-a-date"))
 
@@ -132,9 +115,6 @@ class TestDateValidation:
         assert event.purchase_start < event.purchase_end
 
 
-# ── Ticket / capacity validation ──────────────────────────────────────────────
-
-
 class TestTicketValidation:
     def test_zero_ticket_limit_rejected(self):
         with pytest.raises(ValidationError):
@@ -157,9 +137,6 @@ class TestTicketValidation:
             EventCreate(**valid_payload(seat_types={}))
 
 
-# ── Recurring event validation ────────────────────────────────────────────────
-
-
 class TestRecurringValidation:
     def test_recurring_without_frequency_rejected(self):
         with pytest.raises(ValidationError) as exc_info:
@@ -179,9 +156,6 @@ class TestRecurringValidation:
     def test_non_recurring_no_frequency_accepted(self):
         event = EventCreate(**valid_payload(is_recurring=False))
         assert event.is_recurring is False
-
-
-# ── Name validation ───────────────────────────────────────────────────────────
 
 
 class TestNameValidation:

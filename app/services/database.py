@@ -1,8 +1,3 @@
-"""
-PostgreSQL database service.
-Handles connection, event insertion, duplicate checks, and schema init.
-"""
-
 from __future__ import annotations
 
 import json
@@ -19,12 +14,9 @@ logger = logging.getLogger(__name__)
 
 
 class DatabaseService:
-    """Async wrapper around asyncpg connection pool."""
 
     def __init__(self) -> None:
         self._pool: Optional[asyncpg.Pool] = None
-
-    # ── lifecycle ─────────────────────────────────────────────────────────────
 
     async def connect(self) -> None:
         settings = get_settings()
@@ -44,10 +36,7 @@ class DatabaseService:
             await self._pool.close()
             logger.info("Database pool closed.")
 
-    # ── schema ────────────────────────────────────────────────────────────────
-
     async def create_tables(self) -> None:
-        """Idempotent table creation (safe to call on startup)."""
         ddl = """
         CREATE TABLE IF NOT EXISTS events (
             id                  SERIAL PRIMARY KEY,
@@ -91,10 +80,7 @@ class DatabaseService:
             await conn.execute(ddl)
         logger.info("Tables ensured.")
 
-    # ── queries ───────────────────────────────────────────────────────────────
-
     async def event_exists(self, name: str, date: Any) -> bool:
-        """Return True if an event with the same name+date already exists."""
         row = await self._pool.fetchrow(
             "SELECT 1 FROM events WHERE name = $1 AND date = $2",
             name,
@@ -103,11 +89,6 @@ class DatabaseService:
         return row is not None
 
     async def insert_event(self, event: EventCreate) -> Dict[str, Any]:
-        """
-        Insert a validated event into the database.
-        Returns the inserted row as a dict.
-        Raises asyncpg.UniqueViolationError on duplicate.
-        """
         sql = """
         INSERT INTO events (
             name, date, time, description, seat_types,
@@ -156,5 +137,4 @@ class DatabaseService:
         return dict(row) if row else None
 
 
-# Singleton instance used across the application
 db_service = DatabaseService()

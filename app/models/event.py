@@ -1,8 +1,3 @@
-"""
-Pydantic models for event data validation.
-Validates all fields before database insertion.
-"""
-
 from __future__ import annotations
 
 import re
@@ -16,7 +11,6 @@ RESERVED_TLDS = frozenset({"invalid", "test", "example", "localhost"})
 
 
 class EventCreate(BaseModel):
-    """Full event creation model with strict validation."""
 
     name: str
     date: date
@@ -101,7 +95,6 @@ class EventCreate(BaseModel):
 
 
 class EventResponse(BaseModel):
-    """Returned after a successful database insert."""
 
     id: int
     name: str
@@ -112,14 +105,12 @@ class EventResponse(BaseModel):
 
 
 class ChatMessage(BaseModel):
-    """Inbound chat message from the user."""
 
     session_id: str
     message: str
 
 
 class ChatResponse(BaseModel):
-    """Structured chatbot response following the spec."""
 
     role: str = "assistant"
     scenario: str
@@ -127,7 +118,6 @@ class ChatResponse(BaseModel):
 
 
 class RegisterEventRequest(BaseModel):
-    """Payload for POST /api/register-event (used in tests and direct calls)."""
 
     session_id: str
     event: EventCreate
