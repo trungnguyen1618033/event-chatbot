@@ -151,6 +151,31 @@ class TestHandleMessage:
         assert service.is_completed("sess4")
 
     @pytest.mark.asyncio
+    async def test_handle_message_returns_invalid_input_on_bad_email(self, service):
+        """Spec §6 Conversation Logic — invalid input must trigger invalid_input scenario."""
+        session = service.get_or_create_session("sess-invalid")
+        # Pre-fill everything except organizer_email so the bad email completes the draft
+        # and triggers per-field validation in handle_message.
+        session.draft = {k: v for k, v in FULL_DRAFT.items() if k != "organizer_email"}
+        session.last_asked_field = "organizer_email"
+
+        with (
+            patch.object(
+                service,
+                "_extract_fields",
+                new=AsyncMock(return_value={"organizer_email": "not-an-email"}),
+            ),
+            patch("app.services.chatbot.vector_store") as mock_vs,
+        ):
+            mock_vs.add_message = MagicMock()
+            response = await service.handle_message("sess-invalid", "not-an-email")
+
+        assert response.scenario == "invalid_input"
+        assert "email" in response.message.lower()
+        # The bad value must be dropped so the bot will re-ask the field
+        assert "organizer_email" not in session.draft
+
+    @pytest.mark.asyncio
     async def test_no_after_confirmation_allows_updates(self, service):
         session = service.get_or_create_session("sess5")
         session.draft = {**FULL_DRAFT}

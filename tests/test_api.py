@@ -164,6 +164,34 @@ class TestChatEndpoint:
         assert body["role"] == "assistant"
 
     @patch("app.api.routes.chatbot_service")
+    def test_chat_missing_field_requests_clarification(self, mock_svc):
+        """Spec §6 API Tests — 'Missing field → chatbot requests clarification'.
+
+        Verifies /api/chat surfaces the missing_field scenario with a
+        clarifying next-question message when the user hasn't provided info.
+        """
+        from app.models.event import ChatResponse as CR
+
+        mock_svc.handle_message = AsyncMock(
+            return_value=CR(
+                scenario="missing_field",
+                message="What is the name of your event?",
+            )
+        )
+        mock_svc.is_completed.return_value = False
+
+        resp = client.post(
+            "/api/chat",
+            json={"session_id": "missing-sess", "message": "I want to create an event"},
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["scenario"] == "missing_field"
+        assert body["role"] == "assistant"
+        # Clarification = an actionable question
+        assert "?" in body["message"]
+
+    @patch("app.api.routes.chatbot_service")
     @patch("app.api.routes.db_service")
     def test_chat_auto_saves_on_completion(self, mock_db, mock_svc):
         from app.models.event import ChatResponse as CR

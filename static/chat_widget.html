@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Event Creation Chatbot</title>
+<title>Event Creation Chatbot — Popup Widget</title>
 <style>
   :root {
     --bg: #0f1117;
@@ -21,88 +21,129 @@
     --radius: 16px;
     --radius-sm: 8px;
   }
-
   * { box-sizing: border-box; margin: 0; padding: 0; }
-
   body {
-    background: var(--bg);
+    background: linear-gradient(135deg, #0f1117 0%, #1a1d27 100%);
     color: var(--text);
     font-family: 'Inter', system-ui, -apple-system, sans-serif;
     min-height: 100vh;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    padding: 1rem;
+    padding: 4rem 1.5rem;
   }
-
-  header {
+  .host-page {
+    max-width: 720px;
+    margin: 0 auto;
     text-align: center;
-    margin-bottom: 1.5rem;
   }
-  header h1 {
-    font-size: 1.75rem;
-    font-weight: 700;
+  .host-page h1 {
+    font-size: 2rem;
+    margin-bottom: 0.75rem;
     background: linear-gradient(135deg, var(--accent), #a78bfa);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
   }
-  header p { color: var(--text-muted); font-size: 0.875rem; margin-top: 0.25rem; }
+  .host-page p {
+    color: var(--text-muted);
+    line-height: 1.7;
+    margin-bottom: 0.5rem;
+  }
+  .host-page small {
+    display: block;
+    margin-top: 2rem;
+    color: var(--text-muted);
+    font-size: 0.8rem;
+  }
 
-  .chat-container {
-    width: 100%;
-    max-width: 680px;
+  /* ── Floating launcher button (bottom-right) ─────────────── */
+  .chat-launcher {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--accent), #a78bfa);
+    color: #fff;
+    border: none;
+    cursor: pointer;
+    box-shadow: 0 12px 28px rgba(99, 102, 241, 0.5);
+    font-size: 1.5rem;
+    z-index: 9999;
+    transition: transform .2s, box-shadow .2s;
+  }
+  .chat-launcher:hover {
+    transform: scale(1.08);
+    box-shadow: 0 16px 36px rgba(99, 102, 241, 0.7);
+  }
+  .chat-launcher.hidden { display: none; }
+
+  /* ── Popup chat panel (fixed bottom-right) ───────────────── */
+  .chat-popup {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    width: 380px;
+    max-width: calc(100vw - 32px);
+    height: 600px;
+    max-height: calc(100vh - 48px);
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: var(--radius);
-    display: flex;
+    display: none;
     flex-direction: column;
-    height: 72vh;
-    min-height: 420px;
-    box-shadow: 0 25px 60px rgba(0,0,0,0.5);
+    box-shadow: 0 25px 60px rgba(0,0,0,0.6);
     overflow: hidden;
+    z-index: 10000;
+    animation: popupIn .25s ease;
+  }
+  .chat-popup.open { display: flex; }
+  @keyframes popupIn {
+    from { opacity: 0; transform: translateY(20px) scale(.96); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
   }
 
   .chat-header {
-    padding: 1rem 1.25rem;
+    padding: 0.9rem 1rem;
     border-bottom: 1px solid var(--border);
     display: flex;
     align-items: center;
-    gap: 0.75rem;
+    gap: 0.6rem;
   }
   .chat-header .avatar {
-    width: 36px; height: 36px;
+    width: 32px; height: 32px;
     border-radius: 50%;
     background: linear-gradient(135deg, var(--accent), #a78bfa);
     display: flex; align-items: center; justify-content: center;
-    font-size: 1rem;
+    font-size: 0.9rem;
     flex-shrink: 0;
   }
-  .chat-header .info strong { font-size: 0.9rem; }
-  .chat-header .info span { font-size: 0.75rem; color: var(--success); }
-  .chat-header .reset-btn {
+  .chat-header .info strong { font-size: 0.85rem; }
+  .chat-header .info span { font-size: 0.7rem; color: var(--success); }
+  .chat-header .header-btns {
     margin-left: auto;
+    display: flex;
+    gap: 0.4rem;
+  }
+  .chat-header button {
     background: var(--surface2);
     border: 1px solid var(--border);
     color: var(--text-muted);
-    font-size: 0.75rem;
-    padding: 0.3rem 0.75rem;
+    font-size: 0.7rem;
+    padding: 0.3rem 0.65rem;
     border-radius: var(--radius-sm);
     cursor: pointer;
     transition: all .2s;
   }
-  .chat-header .reset-btn:hover { border-color: var(--accent); color: var(--text); }
+  .chat-header button:hover { border-color: var(--accent); color: var(--text); }
 
   .messages {
     flex: 1;
     overflow-y: auto;
-    padding: 1.25rem;
+    padding: 1rem;
     display: flex;
     flex-direction: column;
-    gap: 0.875rem;
+    gap: 0.75rem;
     scroll-behavior: smooth;
   }
-
   .messages::-webkit-scrollbar { width: 5px; }
   .messages::-webkit-scrollbar-track { background: transparent; }
   .messages::-webkit-scrollbar-thumb { background: var(--border); border-radius: 99px; }
@@ -117,15 +158,14 @@
     from { opacity: 0; transform: translateY(8px); }
     to   { opacity: 1; transform: translateY(0); }
   }
-
   .message.user { flex-direction: row-reverse; align-self: flex-end; }
   .message.bot  { align-self: flex-start; }
 
   .bubble {
-    padding: 0.7rem 1rem;
+    padding: 0.65rem 0.9rem;
     border-radius: var(--radius);
-    font-size: 0.875rem;
-    line-height: 1.6;
+    font-size: 0.85rem;
+    line-height: 1.55;
     white-space: pre-wrap;
     word-break: break-word;
   }
@@ -145,7 +185,7 @@
 
   .scenario-tag {
     display: inline-block;
-    font-size: 0.65rem;
+    font-size: 0.6rem;
     background: var(--surface2);
     border: 1px solid var(--border);
     color: var(--text-muted);
@@ -163,7 +203,7 @@
     align-items: center;
     color: var(--text-muted);
     font-size: 0.8rem;
-    padding: 0.5rem 0;
+    padding: 0.4rem 0;
   }
   .dots span {
     display: inline-block;
@@ -179,56 +219,15 @@
     40%          { transform: translateY(-5px); }
   }
 
-  .input-area {
-    padding: 1rem;
-    border-top: 1px solid var(--border);
-    display: flex;
-    gap: 0.5rem;
-    align-items: flex-end;
-  }
-  .input-area textarea {
-    flex: 1;
-    background: var(--surface2);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    padding: 0.65rem 0.9rem;
-    color: var(--text);
-    font-size: 0.875rem;
-    font-family: inherit;
-    resize: none;
-    min-height: 44px;
-    max-height: 120px;
-    outline: none;
-    transition: border-color .2s;
-    line-height: 1.5;
-  }
-  .input-area textarea:focus { border-color: var(--accent); }
-  .input-area textarea::placeholder { color: var(--text-muted); }
-
-  .send-btn {
-    width: 44px; height: 44px;
-    border-radius: var(--radius-sm);
-    background: var(--accent);
-    border: none;
-    color: #fff;
-    cursor: pointer;
-    display: flex; align-items: center; justify-content: center;
-    flex-shrink: 0;
-    transition: background .2s;
-    font-size: 1rem;
-  }
-  .send-btn:hover:not(:disabled) { background: var(--accent-hover); }
-  .send-btn:disabled { opacity: .4; cursor: not-allowed; }
-
   .quick-btns {
-    padding: 0 1rem 0.75rem;
+    padding: 0 0.9rem 0.6rem;
     display: flex;
-    gap: 0.5rem;
+    gap: 0.4rem;
     flex-wrap: wrap;
   }
   .quick-btn {
-    font-size: 0.75rem;
-    padding: 0.3rem 0.8rem;
+    font-size: 0.7rem;
+    padding: 0.25rem 0.7rem;
     border-radius: 99px;
     background: var(--surface2);
     border: 1px solid var(--border);
@@ -237,57 +236,145 @@
     transition: all .2s;
   }
   .quick-btn:hover { border-color: var(--accent); color: var(--text); }
+
+  .input-area {
+    padding: 0.75rem;
+    border-top: 1px solid var(--border);
+    display: flex;
+    gap: 0.4rem;
+    align-items: flex-end;
+  }
+  .input-area textarea {
+    flex: 1;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 0.55rem 0.8rem;
+    color: var(--text);
+    font-size: 0.85rem;
+    font-family: inherit;
+    resize: none;
+    min-height: 40px;
+    max-height: 110px;
+    outline: none;
+    transition: border-color .2s;
+    line-height: 1.45;
+  }
+  .input-area textarea:focus { border-color: var(--accent); }
+  .input-area textarea::placeholder { color: var(--text-muted); }
+
+  .send-btn {
+    width: 40px; height: 40px;
+    border-radius: var(--radius-sm);
+    background: var(--accent);
+    border: none;
+    color: #fff;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+    transition: background .2s;
+    font-size: 0.95rem;
+  }
+  .send-btn:hover:not(:disabled) { background: var(--accent-hover); }
+  .send-btn:disabled { opacity: .4; cursor: not-allowed; }
+
+  /* When loaded inside iframe, hide the host-page decoration */
+  body.embedded { padding: 0; background: transparent; }
+  body.embedded .host-page { display: none; }
+  body.embedded .chat-launcher { display: none; }
+  body.embedded .chat-popup { display: flex; position: static; width: 100%; height: 100vh; max-width: none; max-height: none; border-radius: 0; border: none; }
 </style>
 </head>
 <body>
 
-<header>
-  <h1>🎪 Event Creation Chatbot</h1>
-  <p>Describe your event naturally — the AI will guide you step by step.</p>
-</header>
+<!-- Demo host page (visible when widget is launched standalone, hidden in iframe) -->
+<div class="host-page">
+  <h1>Event Creation Chatbot</h1>
+  <p>The floating chat widget at the bottom-right corner demonstrates how
+     this assistant can be embedded into any host page as a popup.</p>
+  <p>It can also be embedded as an iframe — load this page with
+     <code>?embed=1</code> or inside an <code>&lt;iframe&gt;</code>.</p>
+  <small>Click the chat bubble to start a conversation.</small>
+</div>
 
-<div class="chat-container">
+<!-- Launcher (floating button) -->
+<button class="chat-launcher" id="chatLauncher" onclick="togglePopup()" title="Open chat">💬</button>
+
+<!-- Popup chat panel -->
+<div class="chat-popup" id="chatPopup">
   <div class="chat-header">
     <div class="avatar">🤖</div>
     <div class="info">
       <strong>EventBot</strong><br>
       <span>● Online</span>
     </div>
-    <button class="reset-btn" onclick="resetSession()">↺ New session</button>
+    <div class="header-btns">
+      <button onclick="resetSession()" title="New session">↺ New</button>
+      <button onclick="togglePopup()" title="Minimize">✕</button>
+    </div>
   </div>
 
   <div class="messages" id="messages"></div>
 
   <div class="quick-btns" id="quickBtns">
-    <button class="quick-btn" onclick="send('I want to create an event')">🚀 Start creating</button>
-    <button class="quick-btn" onclick="send('Yes, save it')">✅ Yes, save</button>
-    <button class="quick-btn" onclick="send('No, I want to change something')">✏️ Change something</button>
+    <button class="quick-btn" onclick="send('I want to create an event')">🚀 Start</button>
+    <button class="quick-btn" onclick="send('Yes, save it')">✅ Save</button>
+    <button class="quick-btn" onclick="send('Remind me of my last event')">🔍 Recall</button>
   </div>
 
   <div class="input-area">
     <textarea
       id="msgInput"
-      placeholder="Type your message… (Enter to send, Shift+Enter for new line)"
+      placeholder="Type your message…"
       rows="1"
     ></textarea>
-    <button class="send-btn" id="sendBtn" onclick="handleSend()" title="Send">
-      ➤
-    </button>
+    <button class="send-btn" id="sendBtn" onclick="handleSend()" title="Send">➤</button>
   </div>
 </div>
 
 <script>
 const API_BASE = window.location.origin + '/api';
 let sessionId = crypto.randomUUID();
+let popupOpen = false;
+let greeted = false;
 
 const messagesEl = document.getElementById('messages');
 const input = document.getElementById('msgInput');
 const sendBtn = document.getElementById('sendBtn');
+const popup = document.getElementById('chatPopup');
+const launcher = document.getElementById('chatLauncher');
 
-// Auto-resize textarea
+// Detect iframe / embed mode — auto-open and hide chrome
+const isEmbedded =
+  window.self !== window.top ||
+  new URLSearchParams(window.location.search).get('embed') === '1';
+if (isEmbedded) {
+  document.body.classList.add('embedded');
+  popup.classList.add('open');
+  popupOpen = true;
+  greet();
+}
+
+function togglePopup() {
+  popupOpen = !popupOpen;
+  popup.classList.toggle('open', popupOpen);
+  launcher.classList.toggle('hidden', popupOpen);
+  if (popupOpen && !greeted) greet();
+}
+
+function greet() {
+  greeted = true;
+  appendMessage(
+    'bot',
+    "👋 Hello! I'm EventBot. Tell me about the event you'd like to create and I'll guide you step by step.",
+    ''
+  );
+  input.focus();
+}
+
 input.addEventListener('input', () => {
   input.style.height = 'auto';
-  input.style.height = Math.min(input.scrollHeight, 120) + 'px';
+  input.style.height = Math.min(input.scrollHeight, 110) + 'px';
 });
 
 input.addEventListener('keydown', (e) => {
@@ -300,19 +387,16 @@ input.addEventListener('keydown', (e) => {
 function appendMessage(role, text, scenario = '') {
   const wrapper = document.createElement('div');
   wrapper.className = `message ${role}`;
-
   const bubble = document.createElement('div');
   bubble.className = 'bubble';
   if (scenario === 'success_save') bubble.classList.add('success');
   if (scenario === 'error_db' || scenario === 'invalid_input') bubble.classList.add('error');
-
   if (role === 'bot' && scenario) {
     const tag = document.createElement('div');
     tag.className = 'scenario-tag';
     tag.textContent = scenario.replace(/_/g, ' ');
     bubble.appendChild(tag);
   }
-
   const textNode = document.createElement('div');
   textNode.textContent = text;
   bubble.appendChild(textNode);
@@ -337,13 +421,11 @@ function hideTyping() {
 async function send(text) {
   const msg = text || input.value.trim();
   if (!msg) return;
-
   appendMessage('user', msg);
   input.value = '';
   input.style.height = 'auto';
   sendBtn.disabled = true;
   showTyping();
-
   try {
     const res = await fetch(`${API_BASE}/chat`, {
       method: 'POST',
@@ -371,15 +453,6 @@ function resetSession() {
   messagesEl.innerHTML = '';
   appendMessage('bot', '🆕 New session started. What event would you like to create?', '');
 }
-
-// Greeting on load
-window.addEventListener('load', () => {
-  appendMessage(
-    'bot',
-    "👋 Hello! I'm EventBot, your AI-powered event creation assistant.\n\nI'll guide you through creating an event step by step. Just tell me the name of your event to get started!",
-    ''
-  );
-});
 </script>
 
 </body>

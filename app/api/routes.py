@@ -20,6 +20,10 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+def _err_detail(scenario: str, message: str) -> Dict[str, str]:
+    return {"role": "assistant", "scenario": scenario, "message": message}
+
+
 @router.post("/chat", response_model=ChatResponse, tags=["Chat"])
 async def chat(payload: ChatMessage) -> ChatResponse:
 
@@ -56,9 +60,6 @@ async def chat(payload: ChatMessage) -> ChatResponse:
     return response
 
 
-# ── Direct event registration ─────────────────────────────────────────────────
-
-
 @router.post(
     "/register-event",
     status_code=status.HTTP_201_CREATED,
@@ -70,14 +71,10 @@ async def register_event(payload: RegisterEventRequest) -> Dict[str, Any]:
         if await db_service.event_exists(payload.event.name, payload.event.date):
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail={
-                    "role": "assistant",
-                    "scenario": "error_db",
-                    "message": (
-                        f"An event named '{payload.event.name}' "
-                        f"on {payload.event.date} already exists."
-                    ),
-                },
+                detail=_err_detail(
+                    "error_db",
+                    f"An event named '{payload.event.name}' on {payload.event.date} already exists.",
+                ),
             )
 
         row = await db_service.insert_event(payload.event)
@@ -90,11 +87,7 @@ async def register_event(payload: RegisterEventRequest) -> Dict[str, Any]:
     except asyncpg.UniqueViolationError:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail={
-                "role": "assistant",
-                "scenario": "error_db",
-                "message": "Duplicate event (same name + date).",
-            },
+            detail=_err_detail("error_db", "Duplicate event (same name + date)."),
         )
     except HTTPException:
         raise
@@ -102,15 +95,8 @@ async def register_event(payload: RegisterEventRequest) -> Dict[str, Any]:
         logger.exception("register_event error: %s", exc)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail={
-                "role": "assistant",
-                "scenario": "error_db",
-                "message": "Failed to save the event due to a database error.",
-            },
+            detail=_err_detail("error_db", "Failed to save the event due to a database error."),
         )
-
-
-# ── Events list / detail ──────────────────────────────────────────────────────
 
 
 @router.get("/events", tags=["Events"])
@@ -130,22 +116,11 @@ async def get_event(event_id: int) -> Dict[str, Any]:
     return row
 
 
-# Session management
-
-
 @router.delete("/sessions/{session_id}", tags=["Sessions"])
 async def reset_session(session_id: str) -> Dict[str, str]:
     chatbot_service.reset_session(session_id)
     return {"message": f"Session '{session_id}' has been reset."}
 
 
-# internal helper
-
-
 async def _persist_event(session_id: str, event: EventCreate) -> Dict[str, Any]:
-    if await db_service.event_exists(event.name, event.date):
-        raise asyncpg.UniqueViolationError(
-            "Event with same name+date exists",
-            constraint_name="events_name_date_key",
-        )
     return await db_service.insert_event(event)

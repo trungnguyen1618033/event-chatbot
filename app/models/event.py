@@ -4,9 +4,8 @@ import re
 from datetime import date, time
 from typing import Dict, Optional
 
-from pydantic import BaseModel, EmailStr, field_validator, model_validator
+from pydantic import BaseModel, field_validator, model_validator
 
-# RFC 6761 reserved TLDs — never resolve to real mailboxes.
 RESERVED_TLDS = frozenset({"invalid", "test", "example", "localhost"})
 
 
@@ -30,8 +29,6 @@ class EventCreate(BaseModel):
     is_recurring: bool = False
     recurrence_frequency: Optional[str] = None
     is_online: bool = False
-
-    # ── field-level validators ────────────────────────────────────────────────
 
     @field_validator("name")
     @classmethod
@@ -76,8 +73,6 @@ class EventCreate(BaseModel):
             if price < 0:
                 raise ValueError(f"Price for '{seat}' must be non-negative.")
         return v
-
-    # ── model-level (cross-field) validators ──────────────────────────────────
 
     @model_validator(mode="after")
     def purchase_period_valid(self) -> "EventCreate":

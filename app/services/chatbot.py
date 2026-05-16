@@ -18,7 +18,6 @@ from app.services.vector_store import vector_store
 
 logger = logging.getLogger(__name__)
 
-# Patterns that trigger semantic recall of past events
 _RECALL_PATTERNS = (
     r"\bremind\b.*\b(event|previous|last)\b",
     r"\b(show|list|view|tell me about)\b.*\b(events?|previous|past|recent)\b",
@@ -27,7 +26,7 @@ _RECALL_PATTERNS = (
 )
 
 
-# Required fields (must be present before we can save)
+# Required fields
 REQUIRED_FIELDS = [
     "name",
     "date",
@@ -135,8 +134,6 @@ class ChatbotService:
             logger.info("LLM model=%s (Gemini)", s.gemini_model)
         return self._llm
 
-    # ── public interface ──────────────────────────────────────────────────────
-
     def get_or_create_session(self, session_id: str) -> SessionState:
         if session_id not in self._sessions:
             self._sessions[session_id] = SessionState(session_id)
@@ -167,8 +164,7 @@ class ChatbotService:
         if not session.draft and self._looks_like_recall(user_message):
             recall = await self._handle_recall(session_id, user_message)
             if recall is not None:
-                self._append_assistant(session, recall.message)
-                return recall
+                return self._respond(session, recall.scenario, recall.message)
 
         updates = self._try_bare_assignment(session.last_asked_field, user_message)
         if updates is None:
@@ -178,32 +174,25 @@ class ChatbotService:
                 asked_field=session.last_asked_field,
                 session_id=session_id,
             )
-        if updates:
-            updates = {k: v for k, v in updates.items() if k in FIELD_PROMPTS}
-            session.draft.update({k: v for k, v in updates.items() if v is not None})
+        updates = self._apply_updates(session, updates)
 
         # validate just-updated fields immediately
-        updated_keys = {k for k, v in (updates or {}).items() if v is not None}
-        per_field_error, bad_keys = self._validate_updates(session.draft, updated_keys)
+        per_field_error, bad_keys = self._validate_updates(session.draft, set(updates))
         if per_field_error:
             for k in bad_keys:
                 session.draft.pop(k, None)
-            response = ChatResponse(
-                scenario="invalid_input",
-                message=f"{per_field_error} Could you correct it?",
+            return self._respond(
+                session, "invalid_input", f"{per_field_error} Could you correct it?"
             )
-            self._append_assistant(session, response.message)
-            return response
 
         # full draft validation (cross-field rules, runs only when complete)
         validation_error = self._validate_draft(session.draft)
         if validation_error and self._draft_looks_complete(session.draft):
-            response = ChatResponse(
-                scenario="invalid_input",
-                message=f"There's an issue with the data: {validation_error}. Could you correct it?",
+            return self._respond(
+                session,
+                "invalid_input",
+                f"There's an issue with the data: {validation_error}. Could you correct it?",
             )
-            self._append_assistant(session, response.message)
-            return response
 
         # check completeness
         missing = self._missing_fields(session.draft)
@@ -215,60 +204,37 @@ class ChatbotService:
         prompt = FIELD_PROMPTS.get(next_field, f"Could you provide the {next_field}?")
         session.last_asked_field = next_field
 
-        if updates:
-            ack = self._build_ack(updates)
-            message = f"{ack} {prompt}"
-        else:
-            message = prompt
-
-        response = ChatResponse(scenario="missing_field", message=message)
-        self._append_assistant(session, response.message)
-        return response
+        message = f"{self._build_ack(updates)} {prompt}" if updates else prompt
+        return self._respond(session, "missing_field", message)
 
     def _ask_for_confirmation(self, session: SessionState) -> ChatResponse:
-        draft = session.draft
-        summary = self._build_summary(draft)
+        summary = self._build_summary(session.draft)
         session.awaiting_confirmation = True
         message = (
             f"Great, I have all the details! Here's a summary:\n\n{summary}\n\n"
             "Shall I save this event? (Yes / No)"
         )
-        response = ChatResponse(scenario="confirmation", message=message)
-        self._append_assistant(session, response.message)
-        return response
+        return self._respond(session, "confirmation", message)
 
     async def _handle_confirmation(self, session: SessionState, user_message: str) -> ChatResponse:
+        session.awaiting_confirmation = False
         affirmative = re.search(
             r"\b(yes|yeah|yep|sure|ok|okay|go ahead|save|confirm|do it)\b",
             user_message.lower(),
         )
         if affirmative:
-            session.awaiting_confirmation = False
             session.completed = True
-            response = ChatResponse(
-                scenario="success_save",
-                message="Saving your event now…",
-            )
-        else:
-            session.awaiting_confirmation = False
-            updates = await self._extract_fields(session.draft, user_message, asked_field=None)
-            if updates:
-                updates = {k: v for k, v in updates.items() if k in FIELD_PROMPTS}
-                session.draft.update({k: v for k, v in updates.items() if v is not None})
-                ack = self._build_ack(updates)
-                response = ChatResponse(
-                    scenario="update_previous_field",
-                    message=f"{ack} Anything else to update, or shall I re-summarize?",
-                )
-            else:
-                response = ChatResponse(
-                    scenario="missing_field",
-                    message="No problem! What would you like to change?",
-                )
-        self._append_assistant(session, response.message)
-        return response
+            return self._respond(session, "success_save", "Saving your event now…")
 
-    # LangChain extraction
+        updates = await self._extract_fields(session.draft, user_message, asked_field=None)
+        updates = self._apply_updates(session, updates)
+        if updates:
+            return self._respond(
+                session,
+                "update_previous_field",
+                f"{self._build_ack(updates)} Anything else to update, or shall I re-summarize?",
+            )
+        return self._respond(session, "missing_field", "No problem! What would you like to change?")
 
     async def _extract_fields(
         self,
@@ -281,7 +247,6 @@ class ChatbotService:
             draft=json.dumps(draft, default=str, indent=2),
             asked_field=asked_field or "(no specific field — extract whatever is mentioned)",
         )
-        # Inject relevant prior chat snippets for continuity (spec §4)
         if session_id:
             try:
                 recalled = vector_store.semantic_search(
@@ -339,8 +304,7 @@ class ChatbotService:
             )
 
         lines = [
-            f"• {e['name']} — {e['date']} at {e['venue_name']} ({e['category']})"
-            for e in events
+            f"• {e['name']} — {e['date']} at {e['venue_name']} ({e['category']})" for e in events
         ]
         return ChatResponse(
             scenario="missing_field",
@@ -350,6 +314,16 @@ class ChatbotService:
                 + "\n\nWould you like to create a new event? If so, what's its name?"
             ),
         )
+
+    @staticmethod
+    def _apply_updates(
+        session: SessionState, raw_updates: Optional[Dict[str, Any]]
+    ) -> Dict[str, Any]:
+        if not raw_updates:
+            return {}
+        clean = {k: v for k, v in raw_updates.items() if k in FIELD_PROMPTS and v is not None}
+        session.draft.update(clean)
+        return clean
 
     @staticmethod
     def _missing_fields(draft: Dict[str, Any]) -> List[str]:
@@ -400,7 +374,6 @@ class ChatbotService:
             "organizer_email",
             "category",
         }:
-            # Free text: keep if not obviously a sentence
             if len(msg) > 60 and " " in msg:
                 return None
             return {asked_field: msg}
@@ -410,7 +383,7 @@ class ChatbotService:
     @staticmethod
     def _validate_draft(draft: Dict[str, Any]) -> Optional[str]:
         if ChatbotService._missing_fields(draft):
-            return None  # Don't validate incomplete drafts
+            return None
         try:
             EventCreate(**draft)
             return None
@@ -480,6 +453,11 @@ class ChatbotService:
     def _append_assistant(session: SessionState, content: str) -> None:
         vector_store.add_message(session.session_id, "assistant", content)
         session.history.append({"role": "assistant", "content": content})
+
+    @classmethod
+    def _respond(cls, session: SessionState, scenario: str, message: str) -> ChatResponse:
+        cls._append_assistant(session, message)
+        return ChatResponse(scenario=scenario, message=message)
 
     def get_draft(self, session_id: str) -> Optional[Dict[str, Any]]:
         session = self._sessions.get(session_id)
