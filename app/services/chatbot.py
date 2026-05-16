@@ -160,6 +160,7 @@ class ChatbotService:
                 session.draft, user_message, asked_field=session.last_asked_field
             )
         if updates:
+            updates = {k: v for k, v in updates.items() if k in FIELD_PROMPTS}
             session.draft.update({k: v for k, v in updates.items() if v is not None})
 
         # validate just-updated fields immediately
@@ -233,6 +234,7 @@ class ChatbotService:
             session.awaiting_confirmation = False
             updates = await self._extract_fields(session.draft, user_message, asked_field=None)
             if updates:
+                updates = {k: v for k, v in updates.items() if k in FIELD_PROMPTS}
                 session.draft.update({k: v for k, v in updates.items() if v is not None})
                 ack = self._build_ack(updates)
                 response = ChatResponse(
@@ -282,7 +284,9 @@ class ChatbotService:
     def _draft_looks_complete(draft: Dict[str, Any]) -> bool:
         return not any(draft.get(f) is None for f in REQUIRED_FIELDS)
 
-    _MULTI_MARKERS = (",", " and ", " also ", "actually", "change the", " on ", " at ")
+    _MULTI_WORDS = frozenset(
+        {"also", "actually", "and", "but", "change", "update", "instead", "should"}
+    )
 
     @staticmethod
     def _try_bare_assignment(asked_field: Optional[str], message: str) -> Optional[Dict[str, Any]]:
@@ -291,8 +295,10 @@ class ChatbotService:
         msg = message.strip()
         if not msg or len(msg) > 100:
             return None
-        lowered = msg.lower()
-        if any(marker in lowered for marker in ChatbotService._MULTI_MARKERS):
+        if "," in msg:
+            return None
+        words = set(re.findall(r"\b[a-z]+\b", msg.lower()))
+        if words & ChatbotService._MULTI_WORDS:
             return None
 
         if asked_field in {"ticket_limit", "capacity"}:

@@ -87,7 +87,12 @@ async def main() -> int:
 
     log_lines: List[str] = []
     started = datetime.now()
-    header = f"Replay started at {started.isoformat(timespec='seconds')}\nProvider: see settings.llm_provider"
+    from app.config import get_settings
+
+    header = (
+        f"Replay started at {started.isoformat(timespec='seconds')}\n"
+        f"Provider: Gemini (model={get_settings().gemini_model})"
+    )
     log_lines.append(header)
 
     await replay(1, "Successful Event Creation", SCENARIO_1, log_lines)

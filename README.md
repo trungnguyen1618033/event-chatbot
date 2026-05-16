@@ -36,7 +36,7 @@ git clone <repo> event-chatbot && cd event-chatbot
 
 # 2. Configure environment
 cp .env.example .env
-# Edit .env — set your OPENAI_API_KEY
+# Edit .env — set your GEMINI_API_KEY (get one free at https://aistudio.google.com/app/apikey)
 
 # 3. Start everything (Postgres + App)
 docker-compose up --build
@@ -57,7 +57,7 @@ pip install -r requirements.txt
 
 # 2. Configure environment
 cp .env.example .env
-# Edit .env with your DB credentials and OPENAI_API_KEY
+# Edit .env with your DB credentials and GEMINI_API_KEY
 
 # 3. Create the database
 createdb event_chatbot
@@ -76,8 +76,8 @@ open http://localhost:8000
 
 | Variable | Default | Description |
 |---|---|---|
-| `OPENAI_API_KEY` | *(required)* | Your OpenAI API key |
-| `OPENAI_MODEL` | `gpt-4o-mini` | LLM model name |
+| `GEMINI_API_KEY` | *(required)* | Google Gemini API key — get one at https://aistudio.google.com/app/apikey |
+| `GEMINI_MODEL` | `gemini-1.5-flash` | Gemini model name |
 | `DB_HOST` | `localhost` | PostgreSQL host |
 | `DB_PORT` | `5432` | PostgreSQL port |
 | `DB_NAME` | `event_chatbot` | Database name |
