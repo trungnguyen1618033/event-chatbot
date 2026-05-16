@@ -224,5 +224,6 @@ logs/
 # Local-only files (not pushed to repo)
 *.md
 !README.md
+!CONVERSATION_LOGS.md
 /test*.py
 .vscode/

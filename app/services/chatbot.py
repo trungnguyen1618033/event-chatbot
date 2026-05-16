@@ -13,9 +13,18 @@ from pydantic import ValidationError
 
 from app.config import get_settings
 from app.models.event import ChatResponse, EventCreate
+from app.services.database import db_service
 from app.services.vector_store import vector_store
 
 logger = logging.getLogger(__name__)
+
+# Patterns that trigger semantic recall of past events
+_RECALL_PATTERNS = (
+    r"\bremind\b.*\b(event|previous|last)\b",
+    r"\b(show|list|view|tell me about)\b.*\b(events?|previous|past|recent)\b",
+    r"\b(my|the)\s+(last|previous|recent)\s+events?\b",
+    r"\bwhat\s+events?\s+(have I|did I|are there)",
+)
 
 
 # Required fields (must be present before we can save)
@@ -154,10 +163,20 @@ class ChatbotService:
         if session.awaiting_confirmation:
             return await self._handle_confirmation(session, user_message)
 
+        # semantic recall: "remind me of the last event I created" / "show my events"
+        if not session.draft and self._looks_like_recall(user_message):
+            recall = await self._handle_recall(session_id, user_message)
+            if recall is not None:
+                self._append_assistant(session, recall.message)
+                return recall
+
         updates = self._try_bare_assignment(session.last_asked_field, user_message)
         if updates is None:
             updates = await self._extract_fields(
-                session.draft, user_message, asked_field=session.last_asked_field
+                session.draft,
+                user_message,
+                asked_field=session.last_asked_field,
+                session_id=session_id,
             )
         if updates:
             updates = {k: v for k, v in updates.items() if k in FIELD_PROMPTS}
@@ -256,11 +275,28 @@ class ChatbotService:
         draft: Dict[str, Any],
         user_message: str,
         asked_field: Optional[str] = None,
+        session_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         system_content = EXTRACTION_SYSTEM_PROMPT.format(
             draft=json.dumps(draft, default=str, indent=2),
             asked_field=asked_field or "(no specific field — extract whatever is mentioned)",
         )
+        # Inject relevant prior chat snippets for continuity (spec §4)
+        if session_id:
+            try:
+                recalled = vector_store.semantic_search(
+                    user_message, session_id=session_id, n_results=3
+                )
+                recalled = [r for r in recalled if r and r != user_message]
+                if recalled:
+                    system_content += (
+                        "\n\nRelevant prior turns from this session "
+                        "(do not echo back; use only for context):\n"
+                        + "\n".join(f"- {r}" for r in recalled)
+                    )
+            except Exception as exc:
+                logger.debug("semantic_search failed: %s", exc)
+
         messages = [
             SystemMessage(content=system_content),
             HumanMessage(content=user_message),
@@ -275,6 +311,45 @@ class ChatbotService:
         except (json.JSONDecodeError, Exception) as exc:
             logger.warning("Extraction failed: %s", exc)
             return {}
+
+    @staticmethod
+    def _looks_like_recall(message: str) -> bool:
+        text = message.lower()
+        return any(re.search(p, text) for p in _RECALL_PATTERNS)
+
+    async def _handle_recall(self, session_id: str, user_message: str) -> Optional[ChatResponse]:
+        try:
+            events = await db_service.get_events(limit=5)
+        except Exception as exc:
+            logger.warning("recall: get_events failed: %s", exc)
+            return None
+
+        if not events:
+            related = vector_store.semantic_search(user_message, n_results=3)
+            extra = ""
+            if related:
+                extra = "\n\nFrom past conversations:\n" + "\n".join(f"- {r}" for r in related)
+            return ChatResponse(
+                scenario="missing_field",
+                message=(
+                    "You haven't saved any events yet."
+                    + extra
+                    + "\n\nWhat's the name of the event you want to create?"
+                ),
+            )
+
+        lines = [
+            f"• {e['name']} — {e['date']} at {e['venue_name']} ({e['category']})"
+            for e in events
+        ]
+        return ChatResponse(
+            scenario="missing_field",
+            message=(
+                "Here are your most recent events:\n\n"
+                + "\n".join(lines)
+                + "\n\nWould you like to create a new event? If so, what's its name?"
+            ),
+        )
 
     @staticmethod
     def _missing_fields(draft: Dict[str, Any]) -> List[str]:

@@ -1,0 +1,477 @@
+Senior Python Coding Test
+Event Creation Chatbot with PostgreSQL Integration
+Overview
+Your task is to implement an AI-assisted chatbot that allows users to create new events interactively through conversation.
+ The chatbot should guide users step by step, validate their input, handle missing information, and save all valid event data into a PostgreSQL database.
+This test evaluates your ability to design a modular, production-level backend system with clean code, dynamic logic, and strong validation.
+
+Goals
+Build an intelligent chatbot capable of guiding users through event creation.
+
+
+Handle conversational input dynamically (including missed or revised answers).
+
+
+Ensure robust data validation and database persistence using PostgreSQL.
+
+
+Maintain clear architecture, documentation, and best practices.
+
+
+
+Functional Requirements
+1. Chatbot Features
+The chatbot should collect the following details from users:
+Category
+Field
+Example
+Basic Info
+Event name
+Kyoto Jazz Night
+
+
+Date
+2026-03-10
+
+
+Time
+19:00
+
+
+Description
+A live jazz performance in Kyoto.
+Tickets
+Seat type(s)
+VIP, Regular, Standing
+
+
+Ticket price per seat type
+VIP: 10000, Regular: 5000
+
+
+Ticket limit per person
+4
+
+
+Purchase period
+2026-01-01 → 2026-03-09
+Venue
+Venue name
+Kyoto Concert Hall
+
+
+Venue address
+123 Sakyo-ku, Kyoto
+
+
+Capacity
+1000
+Organizer
+Organizer name
+Fenix Entertainment
+
+
+Organizer email
+info@fenix.co.jp
+Other
+Event category
+Concert
+
+
+Language
+Japanese
+
+
+Is recurring?
+No
+
+
+Online / Offline
+Offline
+
+
+2. Input Validation & Filtering
+Your chatbot must:
+Detect missing or invalid inputs (e.g., wrong date format, invalid email).
+
+
+Ask follow-up questions for incomplete data.
+
+
+Normalize and validate user input before database insertion.
+
+
+Prevent duplicate events (same name + date combination).
+
+
+
+3. Dynamic Conversation Flow
+The chatbot should dynamically identify what information is still missing.
+
+
+If the user revises a previous answer, the chatbot should update the corresponding value.
+
+
+The conversation must feel coherent and adaptive, tracking progress toward completion.
+
+
+Example:
+User: Actually, change the event date to March 12th.
+AI: Got it. Updated the event date to 2026-03-12.
+
+
+4. Message Format
+Response Semantic Format Specification
+Each chatbot response must consist of the following three components in order:
+Acknowledgement (optional if contextually repetitive)
+
+
+Briefly acknowledge the user’s input.
+
+
+Example:
+
+
+“Got it.”
+
+
+“Thank you for the information.”
+
+
+“Understood.”
+
+
+Clarification or Repetition of Key Data
+
+
+Reflect back or confirm what the user said or what is being processed.
+
+
+Example:
+
+
+“You mentioned the event date as March 10, 2026.”
+
+
+“You’d like to create an event named Kyoto Jazz Night.”
+
+
+Next Action or Question
+
+
+Clearly indicate what the chatbot expects next from the user.
+
+
+Example:
+
+
+“Could you please provide the venue name?”
+
+
+“Would you like me to save this event now?”
+
+
+Each message must end with one actionable sentence, either requesting information or confirming completion.
+Example conversation:
+User: I want to create an event.
+AI: Great! What’s the name of your event?
+User: Kyoto Jazz Night.
+AI: When will it take place? (YYYY-MM-DD)
+User: March 10th.
+AI: Please provide the time in 24-hour format (HH:MM).
+User: 19:00
+AI: What type of seats are available? (e.g., VIP, Regular)
+User: VIP and Standing
+AI: How many tickets can one person buy?
+User: 4
+AI: What is the venue name?
+User: Kyoto Concert Hall
+AI: Perfect. Confirming: “Kyoto Jazz Night” on 2026-03-10 19:00 at Kyoto Concert Hall. Each user can buy up to 4 tickets. Shall I save this event?
+User: Yes.
+AI: ✅ Event saved successfully to the database.
+Response JSON Format Specification
+Every chatbot response must follow a consistent JSON structure:
+{
+  "role": "assistant",
+  "scenario": "missing_field",
+  "message": "I didn’t catch the event date. Could you please provide it in YYYY-MM-DD format?"
+}
+
+You must define at least five scenarios:
+missing_field — When a required field is missing
+
+
+invalid_input — When user input format is invalid
+
+
+confirmation — When summarizing event details for confirmation
+
+
+success_save — When event is saved successfully
+
+
+error_db — When saving fails or DB connection fails
+
+
+(Optional) update_previous_field — When user changes a prior response
+
+
+
+Technical Stack & Implementation Requirements
+The implementation must integrate the following technologies and libraries to ensure real-world applicability and to test the candidate’s ability to design scalable, AI-integrated systems.
+1. Dialogue Processing & Data Extraction
+Use LangChain + OpenAI to:
+
+
+Parse and extract structured event information (event name, date, time, etc.) from free-form user input.
+
+
+Handle conversation flow logic (prompt templates, memory, retrieval).
+
+
+Implement function calling or tool usage if appropriate to process missing information dynamically.
+
+
+2. Data Validation
+Use Pydantic to define data models and validate output data extracted from the chatbot conversation before database insertion.
+
+
+Example: validate date/time formats, email addresses, ticket limits, etc.
+
+
+Automatically raise validation errors that trigger an appropriate chatbot response (scenario: invalid_input).
+
+
+3. API Endpoint Development
+Create a REST API endpoint /api/register-event using FastAPI.
+
+
+This endpoint must:
+
+
+Accept validated event data (via POST).
+
+
+Save event data to PostgreSQL.
+
+
+Return a unified response (success/error) following the chatbot’s message format (as defined earlier).
+
+
+Example response:
+
+ {
+  "status": "success",
+  "message": "Event 'Kyoto Jazz Night' registered successfully."
+}
+
+
+4. Conversation Storage & Embeddings
+Use ChromaDB (or another vector database) to:
+
+
+Store chat history and embeddings of user messages.
+
+
+Retrieve context for continued conversation (allowing the chatbot to “remember” prior turns).
+
+
+Enable simple semantic retrieval (e.g., “remind me of the last event I created”).
+5. Web Integration (Mandatory)
+Integrate the chatbot with a web system with a simple interface (any web framework is fine).
+
+
+Display chatbot UI as a popup or iframe widget that communicates with the backend API.
+
+
+Communication may occur via REST API or WebSocket for real-time interactions.
+
+
+
+6. Testing & Verification (Mandatory)
+You must write unit tests to verify the correctness and stability of your implementation.
+🧪 Required Unit Tests
+Validation Tests
+ Ensure Pydantic models correctly validate and reject invalid data (dates, emails, etc.).
+
+
+Conversation Logic Tests
+ Simulate user–chatbot exchanges and verify that missing/invalid inputs trigger the correct scenario and formatted response.
+
+
+API Tests
+ Use FastAPI’s TestClient to test the /api/register-event endpoint:
+
+
+Valid payload → returns success
+
+
+Invalid payload → returns error
+
+
+Missing field → chatbot requests clarification
+
+
+Database Tests
+ Confirm that event data is properly inserted into PostgreSQL and that transaction rollbacks occur on error.
+
+
+Event Storage Database Requirements
+Use PostgreSQL for data storage.
+
+
+Create a table named events with the following schema:
+
+
+Column
+Type
+Description
+id
+SERIAL PRIMARY KEY
+Unique identifier
+name
+VARCHAR(255)
+Event name
+date
+DATE
+Event date
+time
+TIME
+Event time
+description
+TEXT
+Description
+seat_types
+JSONB
+Example: {"VIP": 10000, "Regular": 5000}
+purchase_start
+DATE
+Purchase start date
+purchase_end
+DATE
+Purchase end date
+ticket_limit
+INTEGER
+Max tickets per person
+venue_name
+VARCHAR(255)
+Venue name
+venue_address
+VARCHAR(255)
+Venue address
+capacity
+INTEGER
+Total seats
+organizer_name
+VARCHAR(255)
+Organizer name
+organizer_email
+VARCHAR(255)
+Email
+category
+VARCHAR(100)
+Category (e.g., concert)
+language
+VARCHAR(50)
+Language
+is_recurring
+BOOLEAN
+Whether recurring
+recurrence_frequency
+VARCHAR(50)
+Frequency (if recurring)
+is_online
+BOOLEAN
+Whether online event
+created_at
+TIMESTAMP
+Default: NOW()
+updated_at
+TIMESTAMP
+Auto-updated on edit
+
+
+Technical Stack
+Python 3.10+
+
+
+LangChain
+
+
+FastAPI
+
+
+ChromaDB
+
+
+PostgreSQL
+
+
+dotenv for environment variable management
+
+
+pydantic for data validation
+
+
+Use .env for DB credentials and configurations
+
+
+
+Deliverables
+Please submit the following:
+Source Code
+
+
+Organized project structure (e.g., app/, models/, services/, etc.)
+
+
+Code must be runnable with minimal setup.
+
+
+README.md
+
+
+Clear setup instructions
+
+
+Dockerfile for environment setup
+
+
+How to run locally
+
+
+Example conversation flow
+
+
+Database Setup Script
+
+
+SQL or migration file to create tables
+
+
+Sample Conversation Logs
+
+
+At least 2 conversation transcripts:
+
+
+One successful flow
+
+
+One error-handling case (invalid input)
+
+
+Unit test
+
+
+Unit tests for key functions
+
+
+
+
+
+Submission Format
+Zipped project folder.
+.
+
+
