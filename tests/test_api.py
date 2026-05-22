@@ -13,12 +13,12 @@ client = TestClient(app, raise_server_exceptions=False)
 
 VALID_EVENT = {
     "name": "Test Jazz Night",
-    "date": "2026-03-10",
+    "date": "2027-06-01",
     "time": "19:00:00",
     "description": "A test event.",
     "seat_types": {"VIP": 10000, "Regular": 5000},
-    "purchase_start": "2026-01-01",
-    "purchase_end": "2026-03-09",
+    "purchase_start": "2027-03-01",
+    "purchase_end": "2027-05-31",
     "ticket_limit": 4,
     "venue_name": "Test Hall",
     "venue_address": "1-1 Test Street, Tokyo",

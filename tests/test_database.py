@@ -11,12 +11,12 @@ from app.services.database import DatabaseService
 
 VALID_EVENT = EventCreate(
     name="Kyoto Jazz Night",
-    date=date(2026, 3, 10),
+    date=date(2027, 6, 1),
     time=time(19, 0),
     description="A live jazz performance.",
     seat_types={"VIP": 10000, "Regular": 5000},
-    purchase_start=date(2026, 1, 1),
-    purchase_end=date(2026, 3, 9),
+    purchase_start=date(2027, 3, 1),
+    purchase_end=date(2027, 5, 31),
     ticket_limit=4,
     venue_name="Kyoto Concert Hall",
     venue_address="123 Sakyo-ku, Kyoto",

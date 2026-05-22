@@ -9,6 +9,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
+from pydantic import BaseModel as _BaseModel
 from pydantic import ValidationError
 
 from app.config import get_settings
@@ -44,24 +45,34 @@ REQUIRED_FIELDS = [
 ]
 
 FIELD_PROMPTS: Dict[str, str] = {
-    "name": "What is the name of your event?",
-    "date": "What is the event date? (YYYY-MM-DD)",
-    "time": "What time does it start? (HH:MM in 24-hour format)",
-    "description": "Could you provide a brief description of the event?",
-    "seat_types": "What seat types are available and their prices? (e.g., VIP: 10000, Regular: 5000)",
-    "ticket_limit": "What is the maximum number of tickets one person can purchase?",
-    "purchase_start": "When does ticket sales open? (YYYY-MM-DD)",
-    "purchase_end": "When does ticket sales close? (YYYY-MM-DD)",
-    "venue_name": "What is the venue name?",
-    "venue_address": "What is the venue address?",
-    "capacity": "What is the total seating capacity of the venue?",
-    "organizer_name": "What is the organizer's name or company?",
-    "organizer_email": "What is the organizer's contact email?",
-    "category": "What category does this event fall under? (e.g., Concert, Conference, Festival)",
-    "language": "What language will the event be conducted in?",
-    "is_recurring": "Is this a recurring event? (Yes/No)",
-    "recurrence_frequency": "How often does it recur? (e.g., weekly, monthly)",
-    "is_online": "Will this event be online or in-person?",
+    "name": "What's the name of your event?",
+    "date": "When will it take place? (e.g. 2027-06-01)",
+    "time": "What time does it kick off? (e.g. 18:00)",
+    "description": "Got a short description for the event? (or type 'skip')",
+    "seat_types": "What ticket types are you offering, and at what prices? (e.g. VIP: 15000, Regular: 8000)",
+    "ticket_limit": "How many tickets can one person buy at most?",
+    "purchase_start": "When do ticket sales open? (e.g. 2027-03-01)",
+    "purchase_end": "And when do they close? (e.g. 2027-05-31)",
+    "venue_name": "Where's it happening — what's the venue called?",
+    "venue_address": "What's the full address of the venue?",
+    "capacity": "How many people can the venue hold in total?",
+    "organizer_name": "Who's organizing this — name or company?",
+    "organizer_email": "What's the best contact email for the organizer?",
+    "category": "How would you categorize this event? (e.g. Concert, Conference, Festival)",
+    "language": "What language will the event be in? (or type 'skip' for English)",
+    "is_recurring": "Will this be a recurring event? (yes / no)",
+    "recurrence_frequency": "How often does it repeat? (e.g. weekly, monthly)",
+    "is_online": "Will it be held online or in-person? (or type 'skip')",
+}
+
+OPTIONAL_FIELDS = ["description", "language", "is_online", "is_recurring"]
+
+_OPTIONAL_DEFAULTS: Dict[str, Any] = {
+    "description": None,
+    "language": "English",
+    "is_online": False,
+    "is_recurring": False,
+    "recurrence_frequency": None,
 }
 
 EXTRACTION_SYSTEM_PROMPT = """
@@ -103,6 +114,27 @@ Field types:
 
 Respond with a pure JSON object, no markdown fences, no explanation.
 """
+
+
+class _EventExtraction(_BaseModel):
+    name: Optional[str] = None
+    date: Optional[str] = None
+    time: Optional[str] = None
+    description: Optional[str] = None
+    seat_types: Optional[Dict[str, int]] = None
+    purchase_start: Optional[str] = None
+    purchase_end: Optional[str] = None
+    ticket_limit: Optional[int] = None
+    venue_name: Optional[str] = None
+    venue_address: Optional[str] = None
+    capacity: Optional[int] = None
+    organizer_name: Optional[str] = None
+    organizer_email: Optional[str] = None
+    category: Optional[str] = None
+    language: Optional[str] = None
+    is_recurring: Optional[bool] = None
+    recurrence_frequency: Optional[str] = None
+    is_online: Optional[bool] = None
 
 
 class SessionState:
@@ -197,6 +229,13 @@ class ChatbotService:
         # check completeness
         missing = self._missing_fields(session.draft)
         if not missing:
+            missing_opt = self._missing_optional_fields(session.draft)
+            if missing_opt:
+                next_opt = missing_opt[0]
+                prompt = FIELD_PROMPTS.get(next_opt, f"Could you provide the {next_opt}?")
+                session.last_asked_field = next_opt
+                msg = f"{self._build_ack(updates)} {prompt}" if updates else prompt
+                return self._respond(session, "missing_field", msg)
             return self._ask_for_confirmation(session)
 
         # ask for next missing field
@@ -267,14 +306,11 @@ class ChatbotService:
             HumanMessage(content=user_message),
         ]
         try:
-            response = await self._get_llm().ainvoke(messages)
-            raw = response.content.strip()
-            # Strip markdown fences if any
-            raw = re.sub(r"^```[a-z]*\n?", "", raw)
-            raw = re.sub(r"\n?```$", "", raw)
-            return json.loads(raw)
-        except (json.JSONDecodeError, Exception) as exc:
-            logger.warning("Extraction failed: %s", exc)
+            structured_llm = self._get_llm().with_structured_output(_EventExtraction)
+            result: _EventExtraction = await structured_llm.ainvoke(messages)
+            return {k: v for k, v in result.model_dump().items() if v is not None}
+        except Exception as exc:
+            logger.warning("Structured extraction failed: %s", exc)
             return {}
 
     @staticmethod
@@ -290,7 +326,7 @@ class ChatbotService:
             return None
 
         if not events:
-            related = vector_store.semantic_search(user_message, n_results=3)
+            related = vector_store.semantic_search(user_message, session_id=session_id, n_results=3)
             extra = ""
             if related:
                 extra = "\n\nFrom past conversations:\n" + "\n".join(f"- {r}" for r in related)
@@ -319,6 +355,11 @@ class ChatbotService:
     def _apply_updates(
         session: SessionState, raw_updates: Optional[Dict[str, Any]]
     ) -> Dict[str, Any]:
+        asked = session.last_asked_field
+        if not raw_updates and asked in OPTIONAL_FIELDS + ["recurrence_frequency"]:
+            default = _OPTIONAL_DEFAULTS.get(asked)
+            session.draft[asked] = default
+            return {}
         if not raw_updates:
             return {}
         clean = {k: v for k, v in raw_updates.items() if k in FIELD_PROMPTS and v is not None}
@@ -328,6 +369,13 @@ class ChatbotService:
     @staticmethod
     def _missing_fields(draft: Dict[str, Any]) -> List[str]:
         return [f for f in REQUIRED_FIELDS if not draft.get(f)]
+
+    @staticmethod
+    def _missing_optional_fields(draft: Dict[str, Any]) -> List[str]:
+        missing = [f for f in OPTIONAL_FIELDS if f not in draft]
+        if draft.get("is_recurring") is True and "recurrence_frequency" not in draft:
+            missing.append("recurrence_frequency")
+        return missing
 
     @staticmethod
     def _draft_looks_complete(draft: Dict[str, Any]) -> bool:
@@ -344,6 +392,11 @@ class ChatbotService:
         msg = message.strip()
         if not msg or len(msg) > 100:
             return None
+
+        # "skip" on optional fields → {} signals _apply_updates to use default
+        if msg.lower() == "skip" and asked_field in OPTIONAL_FIELDS + ["recurrence_frequency"]:
+            return {}
+
         if "," in msg:
             return None
         words = set(re.findall(r"\b[a-z]+\b", msg.lower()))

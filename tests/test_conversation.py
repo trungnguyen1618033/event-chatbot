@@ -23,12 +23,12 @@ def service():
 
 FULL_DRAFT = {
     "name": "Kyoto Jazz Night",
-    "date": date(2026, 3, 10),
+    "date": date(2027, 6, 1),
     "time": time(19, 0),
     "description": "A live jazz performance.",
     "seat_types": {"VIP": 10000, "Regular": 5000},
-    "purchase_start": date(2026, 1, 1),
-    "purchase_end": date(2026, 3, 9),
+    "purchase_start": date(2027, 3, 1),
+    "purchase_end": date(2027, 5, 31),
     "ticket_limit": 4,
     "venue_name": "Kyoto Concert Hall",
     "venue_address": "123 Sakyo-ku, Kyoto",
@@ -203,6 +203,77 @@ class TestHandleMessage:
             response = await service.handle_message("sess6", "Hello again")
 
         assert response.scenario == "success_save"
+
+
+class TestOptionalFields:
+    async def test_optional_fields_asked_after_required(self, service):
+        session = service.get_or_create_session("opt-test")
+        # Only required fields — optional fields intentionally absent
+        session.draft = {k: v for k, v in FULL_DRAFT.items() if k in REQUIRED_FIELDS}
+
+        with (
+            patch.object(service, "_extract_fields", new=AsyncMock(return_value={})),
+            patch("app.services.chatbot.vector_store") as mock_vs,
+        ):
+            mock_vs.add_message = MagicMock()
+            mock_vs.semantic_search = MagicMock(return_value=[])
+            response = await service.handle_message("opt-test", "hello")
+
+        assert response.scenario == "missing_field"
+        assert session.last_asked_field in ["description", "language", "is_online", "is_recurring"]
+
+    async def test_skip_optional_field_uses_default(self, service):
+        session = service.get_or_create_session("skip-test")
+        session.draft = {**FULL_DRAFT}
+        session.last_asked_field = "language"
+
+        with (
+            patch.object(service, "_extract_fields", new=AsyncMock(return_value={})),
+            patch("app.services.chatbot.vector_store") as mock_vs,
+        ):
+            mock_vs.add_message = MagicMock()
+            mock_vs.semantic_search = MagicMock(return_value=[])
+            await service.handle_message("skip-test", "skip")
+
+        assert "language" in session.draft
+        assert session.draft["language"] == "English"
+
+    async def test_confirmation_shown_after_all_optional_answered(self, service):
+        session = service.get_or_create_session("all-opt-test")
+        session.draft = {
+            **FULL_DRAFT,
+            "description": "A great event",
+            "language": "Japanese",
+            "is_online": False,
+            "is_recurring": False,
+        }
+
+        with (
+            patch.object(service, "_extract_fields", new=AsyncMock(return_value={})),
+            patch("app.services.chatbot.vector_store") as mock_vs,
+        ):
+            mock_vs.add_message = MagicMock()
+            mock_vs.semantic_search = MagicMock(return_value=[])
+            response = await service.handle_message("all-opt-test", "ok")
+
+        assert response.scenario == "confirmation"
+
+
+class TestRecallIsolation:
+    async def test_recall_does_not_leak_other_sessions(self, service):
+        with (
+            patch("app.services.chatbot.db_service") as mock_db,
+            patch("app.services.chatbot.vector_store") as mock_vs,
+        ):
+            mock_db.get_events = AsyncMock(return_value=[])
+            mock_vs.semantic_search = MagicMock(return_value=["other session data"])
+            mock_vs.add_message = MagicMock()
+
+            await service._handle_recall("my-session", "show my events")
+
+            mock_vs.semantic_search.assert_called_once_with(
+                "show my events", session_id="my-session", n_results=3
+            )
 
 
 class TestHelpers:

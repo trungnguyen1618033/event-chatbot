@@ -38,6 +38,13 @@ class EventCreate(BaseModel):
             raise ValueError("Event name must not be empty.")
         return v
 
+    @field_validator("date")
+    @classmethod
+    def date_not_in_past(cls, v: date) -> date:
+        if v < date.today():
+            raise ValueError("Event date must be today or in the future.")
+        return v
+
     @field_validator("organizer_email")
     @classmethod
     def valid_email(cls, v: str) -> str:

@@ -11,12 +11,12 @@ from app.models.event import EventCreate
 def valid_payload(**overrides) -> dict:
     base = {
         "name": "Kyoto Jazz Night",
-        "date": date(2026, 3, 10),
+        "date": date(2027, 6, 1),
         "time": time(19, 0),
         "description": "A live jazz performance in Kyoto.",
         "seat_types": {"VIP": 10000, "Regular": 5000},
-        "purchase_start": date(2026, 1, 1),
-        "purchase_end": date(2026, 3, 9),
+        "purchase_start": date(2027, 3, 1),
+        "purchase_end": date(2027, 5, 31),
         "ticket_limit": 4,
         "venue_name": "Kyoto Concert Hall",
         "venue_address": "123 Sakyo-ku, Kyoto",
@@ -84,12 +84,31 @@ class TestDateValidation:
         with pytest.raises(ValidationError):
             EventCreate(**valid_payload(date="not-a-date"))
 
+    def test_past_date_rejected(self):
+        with pytest.raises(ValidationError) as exc_info:
+            EventCreate(**valid_payload(
+                date=date(2020, 1, 1),
+                purchase_start=date(2019, 12, 1),
+                purchase_end=date(2019, 12, 31),
+            ))
+        assert "future" in str(exc_info.value).lower()
+
+    def test_today_date_accepted(self):
+        import datetime as _dt
+        today = _dt.date.today()
+        event = EventCreate(**valid_payload(
+            date=today,
+            purchase_start=today,
+            purchase_end=today,
+        ))
+        assert event.date == today
+
     def test_purchase_end_after_event_date_rejected(self):
         with pytest.raises(ValidationError) as exc_info:
             EventCreate(
                 **valid_payload(
-                    date=date(2026, 3, 10),
-                    purchase_end=date(2026, 3, 15),  # after event date
+                    date=date(2027, 6, 1),
+                    purchase_end=date(2027, 6, 15),  # after event date
                 )
             )
         assert "purchase end" in str(exc_info.value).lower()
@@ -98,8 +117,8 @@ class TestDateValidation:
         with pytest.raises(ValidationError) as exc_info:
             EventCreate(
                 **valid_payload(
-                    purchase_start=date(2026, 3, 1),
-                    purchase_end=date(2026, 2, 1),  # before start
+                    purchase_start=date(2027, 5, 1),
+                    purchase_end=date(2027, 4, 1),  # before start
                 )
             )
         assert "purchase end" in str(exc_info.value).lower()
@@ -107,9 +126,9 @@ class TestDateValidation:
     def test_valid_purchase_period_accepted(self):
         event = EventCreate(
             **valid_payload(
-                purchase_start=date(2026, 1, 1),
-                purchase_end=date(2026, 3, 9),
-                date=date(2026, 3, 10),
+                purchase_start=date(2027, 3, 1),
+                purchase_end=date(2027, 5, 31),
+                date=date(2027, 6, 1),
             )
         )
         assert event.purchase_start < event.purchase_end
